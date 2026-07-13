@@ -1,0 +1,689 @@
+// Praxis — Prisma schema
+//
+// Tenant isolation strategy (defense in depth):
+//  1. Application layer: every tenant-scoped model below carries a
+//     `tenantId` column. All access from application code goes through
+//     a Prisma Client Extension (see src/core/prisma/tenant-scoping.extension.ts)
+//     that automatically injects/verifies `tenantId` on every query. No
+//     repository is allowed to hand-build a `where` clause with tenantId —
+//     the extension does it, which removes an entire class of bugs.
+//  2. Database layer: PostgreSQL Row-Level Security policies (see
+//     prisma/rls.sql) are enabled on every tenant-scoped table as a
+//     backstop, keyed on the `app.tenant_id` session variable set by the
+//     API for the duration of each request transaction.
+//  3. IPM and Pack Intérim models are present here (so the schema never
+//     needs a breaking migration when those modules are built) but their
+//     business logic is intentionally NOT implemented in Phase 1 — see
+//     docs/ARCHITECTURE.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------
+// Core: tenants, modules, subscription, auth, persons, cross-cutting
+// ---------------------------------------------------------------------
+
+enum ModuleCode {
+  RH
+  IPM
+  INTERIM
+}
+
+enum Role {
+  PRAXIS_ADMIN
+  COMPANY_ADMIN
+  HR_ADMIN
+  IPM_MANAGER
+  MANAGER
+  EMPLOYEE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+model Tenant {
+  id            String    @id @default(uuid())
+  name          String
+  sector        String?
+  countryCode   String    @default("SN")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  establishments    Establishment[]
+  moduleActivations ModuleActivation[]
+  subscription      Subscription?
+  users             User[]
+  persons           Person[]
+  employees         Employee[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  paymentTransactions PaymentTransaction[]
+
+  @@map("tenants")
+}
+
+model Establishment {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  address   String?
+  city      String?
+  createdAt DateTime @default(now())
+
+  employees Employee[]
+  shifts    Shift[]
+
+  @@index([tenantId])
+  @@map("establishments")
+}
+
+model ModuleActivation {
+  id           String     @id @default(uuid())
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  moduleCode   ModuleCode
+  isActive     Boolean    @default(true)
+  activatedAt  DateTime   @default(now())
+  deactivatedAt DateTime?
+
+  @@unique([tenantId, moduleCode])
+  @@index([tenantId])
+  @@map("module_activations")
+}
+
+model Subscription {
+  id               String             @id @default(uuid())
+  tenantId         String             @unique
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status           SubscriptionStatus @default(TRIALING)
+  billingCycle     BillingCycle       @default(MONTHLY)
+  trialEndsAt      DateTime
+  currentPeriodEnd DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@map("subscriptions")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  tenantId     String?   // null only for PRAXIS_ADMIN accounts
+  tenant       Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email        String?
+  phone        String?
+  passwordHash String
+  role         Role
+  personId     String?   @unique
+  person       Person?   @relation(fields: [personId], references: [id])
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  managedEmployees Employee[] @relation("EmployeeManager")
+
+  @@unique([tenantId, email])
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@map("users")
+}
+
+// A Person exists once per tenant and is enriched by whichever modules
+// are active (Employee for RH, Beneficiary for IPM, Interimaire for Pack Intérim).
+model Person {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  firstName          String
+  lastName            String
+  dateOfBirth        DateTime?
+  nationalId         String?
+  phone              String?
+  email              String?
+  mobileMoneyProvider String? // WAVE | ORANGE_MONEY
+  mobileMoneyNumber  String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user     User?
+  employee Employee?
+
+  @@index([tenantId])
+  @@map("persons")
+}
+
+model CountryRuleSet {
+  id             String   @id @default(uuid())
+  countryCode    String
+  effectiveFrom  DateTime
+  payload        Json     // full CountryRuleSet shape from @praxis/shared
+  createdAt      DateTime @default(now())
+
+  @@unique([countryCode, effectiveFrom])
+  @@map("country_rule_sets")
+}
+
+enum PaymentTransactionType {
+  SUBSCRIPTION
+  SALARY
+  ADVANCE
+  REIMBURSEMENT
+}
+
+enum PayoutProvider {
+  WAVE
+  ORANGE_MONEY
+}
+
+enum PayoutStatus {
+  PENDING
+  INITIATED
+  SUCCESS
+  FAILED
+}
+
+model PaymentTransaction {
+  id            String                 @id @default(uuid())
+  tenantId      String
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type          PaymentTransactionType
+  provider      PayoutProvider
+  amountFcfa    Int
+  status        PayoutStatus           @default(PENDING)
+  personId      String?
+  reference     String                 @unique
+  failureReason String?
+  initiatedAt   DateTime               @default(now())
+  settledAt     DateTime?
+
+  payoutItem PayoutItem?
+
+  @@index([tenantId])
+  @@map("payment_transactions")
+}
+
+enum NotificationChannel {
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+model Notification {
+  id        String             @id @default(uuid())
+  tenantId  String
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  personId  String?
+  channel   NotificationChannel
+  template  String
+  payload   Json
+  status    NotificationStatus @default(QUEUED)
+  createdAt DateTime           @default(now())
+  sentAt    DateTime?
+
+  @@index([tenantId])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorUserId String?
+  action     String
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------
+// Praxis RH
+// ---------------------------------------------------------------------
+
+enum EmploymentCategory {
+  ouvrier
+  employe
+  agent_maitrise
+  cadre
+}
+
+enum EmployeeStatus {
+  ONBOARDING
+  ACTIVE
+  ON_LEAVE
+  SUSPENDED
+  OFFBOARDING
+  TERMINATED
+}
+
+model Employee {
+  id                 String             @id @default(uuid())
+  tenantId           String
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  personId           String             @unique
+  person             Person             @relation(fields: [personId], references: [id], onDelete: Cascade)
+  employeeNumber     String
+  establishmentId    String?
+  establishment      Establishment?     @relation(fields: [establishmentId], references: [id])
+  position           String
+  department         String?
+  employmentCategory EmploymentCategory @default(employe)
+  status             EmployeeStatus     @default(ONBOARDING)
+  hireDate           DateTime
+  endDate            DateTime?
+  managerUserId      String?
+  manager            User?              @relation("EmployeeManager", fields: [managerUserId], references: [id])
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  contracts      Contract[]
+  shifts         Shift[]
+  clockEvents    ClockEvent[]
+  leaveBalances  LeaveBalance[]
+  leaveRequests  LeaveRequest[]
+  payslipLines   PayslipLine[]
+  payslips       Payslip[]
+
+  @@unique([tenantId, employeeNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("employees")
+}
+
+enum ContractType {
+  CDI
+  CDD
+  STAGE
+  PRESTATION
+}
+
+enum ContractStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  ACTIVE
+  ENDED
+  TERMINATED
+}
+
+model Contract {
+  id             String         @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  employee       Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type           ContractType
+  status         ContractStatus @default(DRAFT)
+  startDate      DateTime
+  endDate        DateTime?
+  trialEndDate   DateTime?
+  baseSalaryFcfa Int
+  weeklyHours    Int            @default(40)
+  documentUrl    String?
+  signedAt       DateTime?
+  renewalCount   Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, employeeId])
+  @@map("contracts")
+}
+
+enum ShiftStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model Shift {
+  id              String        @id @default(uuid())
+  tenantId        String
+  employeeId      String
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  establishmentId String?
+  establishment   Establishment? @relation(fields: [establishmentId], references: [id])
+  date            DateTime
+  startTime       DateTime
+  endTime         DateTime
+  status          ShiftStatus   @default(DRAFT)
+  publishedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, employeeId, date])
+  @@map("shifts")
+}
+
+enum ClockEventType {
+  CLOCK_IN
+  CLOCK_OUT
+  BREAK_START
+  BREAK_END
+}
+
+enum ClockEventSource {
+  ONLINE
+  OFFLINE_SYNC
+}
+
+model ClockEvent {
+  id             String           @id @default(uuid())
+  tenantId       String
+  employeeId     String
+  employee       Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type           ClockEventType
+  timestamp      DateTime
+  source         ClockEventSource @default(ONLINE)
+  clientEventId  String           // idempotency key generated offline by the PWA
+  latitude       Float?
+  longitude      Float?
+  photoUrl       String?
+  flaggedLate    Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  @@unique([tenantId, clientEventId])
+  @@index([tenantId])
+  @@index([tenantId, employeeId, timestamp])
+  @@map("clock_events")
+}
+
+enum LeaveType {
+  CONGE_PAYE
+  MALADIE
+  MATERNITE
+  PATERNITE
+  EVENEMENT_FAMILIAL
+  SANS_SOLDE
+  AUTRE
+}
+
+model LeaveBalance {
+  id           String   @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType    LeaveType
+  year         Int
+  accruedDays  Float    @default(0)
+  takenDays    Float    @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([employeeId, leaveType, year])
+  @@index([tenantId])
+  @@map("leave_balances")
+}
+
+enum LeaveRequestStatus {
+  PENDING_MANAGER
+  PENDING_HR
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model LeaveRequest {
+  id               String              @id @default(uuid())
+  tenantId         String
+  employeeId       String
+  employee         Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type             LeaveType
+  startDate        DateTime
+  endDate          DateTime
+  days             Float
+  status           LeaveRequestStatus  @default(PENDING_MANAGER)
+  reason           String?
+  managerDecisionBy String?
+  managerDecisionAt DateTime?
+  hrDecisionBy     String?
+  hrDecisionAt     DateTime?
+  rejectionReason  String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, employeeId])
+  @@map("leave_requests")
+}
+
+enum PayrollReportStatus {
+  DRAFT
+  ANOMALY_REVIEW
+  VALIDATED
+  EXPORTED
+  PAID
+}
+
+model PayrollReport {
+  id           String              @id @default(uuid())
+  tenantId     String
+  periodYear   Int
+  periodMonth  Int
+  status       PayrollReportStatus @default(DRAFT)
+  generatedAt  DateTime            @default(now())
+  validatedAt  DateTime?
+  validatedBy  String?
+  exportedAt   DateTime?
+
+  lines PayslipLine[]
+
+  @@unique([tenantId, periodYear, periodMonth])
+  @@index([tenantId])
+  @@map("payroll_reports")
+}
+
+model PayslipLine {
+  id                    String        @id @default(uuid())
+  tenantId              String
+  payrollReportId       String
+  payrollReport         PayrollReport @relation(fields: [payrollReportId], references: [id], onDelete: Cascade)
+  employeeId            String
+  employee              Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  baseSalaryFcfa         Int
+  overtimeHours          Float         @default(0)
+  overtimeAmountFcfa     Int           @default(0)
+  bonusesFcfa            Int           @default(0)
+  advancesDeductedFcfa   Int           @default(0)
+  grossSalaryFcfa        Int
+  employeeContributionsFcfa Int        @default(0)
+  incomeTaxFcfa           Int          @default(0)
+  netSalaryFcfa           Int
+  anomalyFlags            Json?        // [{code, message, severity}]
+  createdAt               DateTime     @default(now())
+
+  @@unique([payrollReportId, employeeId])
+  @@index([tenantId])
+  @@map("payslip_lines")
+}
+
+model Payslip {
+  id            String    @id @default(uuid())
+  tenantId      String
+  employeeId    String
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  periodYear    Int
+  periodMonth   Int
+  fileUrl       String
+  distributedAt DateTime  @default(now())
+  firstViewedAt DateTime?
+
+  @@unique([employeeId, periodYear, periodMonth])
+  @@index([tenantId])
+  @@map("payslips")
+}
+
+model PayoutBatch {
+  id          String                 @id @default(uuid())
+  tenantId    String
+  type        PaymentTransactionType
+  provider    PayoutProvider
+  totalAmountFcfa Int
+  status      PayoutStatus           @default(PENDING)
+  initiatedBy String?
+  initiatedAt DateTime               @default(now())
+  completedAt DateTime?
+
+  items PayoutItem[]
+
+  @@index([tenantId])
+  @@map("payout_batches")
+}
+
+model PayoutItem {
+  id              String            @id @default(uuid())
+  tenantId        String
+  payoutBatchId   String
+  payoutBatch     PayoutBatch       @relation(fields: [payoutBatchId], references: [id], onDelete: Cascade)
+  personId        String
+  amountFcfa      Int
+  status          PayoutStatus      @default(PENDING)
+  providerReference String?
+  failureReason   String?
+  paymentTransactionId String?      @unique
+  paymentTransaction PaymentTransaction? @relation(fields: [paymentTransactionId], references: [id])
+
+  @@index([tenantId])
+  @@map("payout_items")
+}
+
+// ---------------------------------------------------------------------
+// Praxis IPM — schema scaffold only (Phase 3). Not wired to any service
+// or controller yet. Present here so activating the module later never
+// requires a breaking migration.
+// ---------------------------------------------------------------------
+
+model IpmBeneficiary {
+  id           String   @id @default(uuid())
+  tenantId     String
+  personId     String
+  employeeId   String?
+  cardNumber   String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, cardNumber])
+  @@index([tenantId])
+  @@map("ipm_beneficiaries")
+}
+
+model IpmContribution {
+  id           String   @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  periodYear   Int
+  periodMonth  Int
+  baseFcfa     Int
+  rate         Float
+  employerShareFcfa Int
+  employeeShareFcfa Int
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("ipm_contributions")
+}
+
+model IpmProvider {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  category  String
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("ipm_providers")
+}
+
+model IpmReimbursementCase {
+  id           String   @id @default(uuid())
+  tenantId     String
+  beneficiaryId String
+  status       String   @default("SUBMITTED")
+  amountClaimedFcfa Int
+  amountApprovedFcfa Int?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("ipm_reimbursement_cases")
+}
+
+// ---------------------------------------------------------------------
+// Pack Intérim — schema scaffold only (Phase 4). Requires RH module.
+// ---------------------------------------------------------------------
+
+model InterimMission {
+  id                String   @id @default(uuid())
+  tenantId          String
+  clientName        String
+  siteName          String
+  startDate         DateTime
+  endDate           DateTime?
+  billingRateFcfaPerHour Int
+  payRateFcfaPerHour     Int
+  createdAt         DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("interim_missions")
+}
+
+model InterimAssignment {
+  id          String   @id @default(uuid())
+  tenantId    String
+  missionId   String
+  employeeId  String
+  startDate   DateTime
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("interim_assignments")
+}
+
+model InterimTimesheet {
+  id           String   @id @default(uuid())
+  tenantId     String
+  assignmentId String
+  date         DateTime
+  hours        Float
+  clientApproved Boolean @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("interim_timesheets")
+}
+
+model InterimAdvance {
+  id          String   @id @default(uuid())
+  tenantId    String
+  employeeId  String
+  amountFcfa  Int
+  status      String   @default("REQUESTED")
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("interim_advances")
+}

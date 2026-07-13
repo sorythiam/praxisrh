@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+coverage/
+.turbo/
+*.tsbuildinfo
+generated/
+.vscode/
+apps/api/storage/

@@ -1,0 +1,35 @@
+/**
+ * Every Prisma model (PascalCase, matching schema.prisma) that carries a
+ * `tenantId` column and must therefore never be queried without a tenant
+ * in context. `Tenant` itself is deliberately excluded: it IS the tenant.
+ * `CountryRuleSet` is excluded: it is global reference data.
+ */
+export const TENANT_SCOPED_MODELS = new Set<string>([
+  'Establishment',
+  'ModuleActivation',
+  'Subscription',
+  'User',
+  'Person',
+  'PaymentTransaction',
+  'Notification',
+  'AuditLog',
+  'Employee',
+  'Contract',
+  'Shift',
+  'ClockEvent',
+  'LeaveBalance',
+  'LeaveRequest',
+  'PayrollReport',
+  'PayslipLine',
+  'Payslip',
+  'PayoutBatch',
+  'PayoutItem',
+  'IpmBeneficiary',
+  'IpmContribution',
+  'IpmProvider',
+  'IpmReimbursementCase',
+  'InterimMission',
+  'InterimAssignment',
+  'InterimTimesheet',
+  'InterimAdvance',
+]);

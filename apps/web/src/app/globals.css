@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-50 text-gray-900;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-md bg-praxis-600 px-4 py-2 text-sm font-medium text-white hover:bg-praxis-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors;
+}
+
+.btn-danger {
+  @apply inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors;
+}
+
+.card {
+  @apply rounded-lg border border-gray-200 bg-white p-6 shadow-sm;
+}
+
+.input {
+  @apply block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-praxis-500 focus:outline-none focus:ring-1 focus:ring-praxis-500;
+}
+
+.label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+.table-base {
+  @apply min-w-full divide-y divide-gray-200 text-sm;
+}
+
+.table-base th {
+  @apply px-3 py-2 text-left font-semibold text-gray-600 bg-gray-50;
+}
+
+.table-base td {
+  @apply px-3 py-2 text-gray-800;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+}

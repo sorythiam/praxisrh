@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-praxis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-praxis}
+      POSTGRES_DB: ${POSTGRES_DB:-praxis}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-praxis}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - '5432:5432'
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-praxis}:${POSTGRES_PASSWORD:-praxis}@postgres:5432/${POSTGRES_DB:-praxis}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      STORAGE_DIR: /data/storage
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      PORT: 4000
+    volumes:
+      - api_storage:/data/storage
+    ports:
+      - '4000:4000'
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      API_URL: http://api:4000
+    ports:
+      - '3000:3000'
+
+volumes:
+  postgres_data:
+  api_storage:
