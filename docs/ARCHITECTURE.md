@@ -65,7 +65,11 @@ protects the data if that extension is ever bypassed (a raw query, a
 future contributor forgetting to go through `TenantPrismaService`, a
 compromised credential). Neither layer alone would meet the spec's
 "tests automatisés systématiques garantissant qu'aucune requête ne peut
-franchir la frontière d'un tenant" (section 5.4) — together they do.
+franchir la frontière d'un tenant" (section 5.4) — together they do,
+and `apps/api/test/tenant-isolation.e2e-spec.ts` is exactly that
+automated proof: it exercises the HTTP layer, module gating, and RLS
+independently, including a raw-SQL check with no application code
+involved at all. Run it with `npm run test:e2e --workspace=apps/api`.
 
 ## Payroll
 

@@ -6,7 +6,9 @@ import { TenantPrismaService } from '../../core/prisma/tenant-prisma.service';
 import { AuditService } from '../../core/audit/audit.service';
 import { NotificationsService } from '../../core/notifications/notifications.service';
 import { requireTenantId } from '../../core/tenancy/tenant-context';
+import { CurrentEmployeeService } from '../common/current-employee.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 const genTempPassword = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 10);
 
@@ -16,6 +18,7 @@ export class EmployeesService {
     private tenantPrisma: TenantPrismaService,
     private audit: AuditService,
     private notifications: NotificationsService,
+    private currentEmployee: CurrentEmployeeService,
   ) {}
 
   private get client() {
@@ -122,6 +125,39 @@ export class EmployeesService {
     });
     if (!employee) throw new BadRequestException('Employé introuvable.');
     return employee;
+  }
+
+  async getMyProfile() {
+    const employee = await this.currentEmployee.resolve();
+    return employee.person;
+  }
+
+  /**
+   * "Mise à jour de ses informations personnelles (coordonnées, compte
+   * mobile money)" (section 6.10). Resolves the employee from the JWT,
+   * never from a client-supplied id — there is no way to edit someone
+   * else's contact details through this endpoint.
+   */
+  async updateMyProfile(dto: UpdateProfileDto) {
+    const employee = await this.currentEmployee.resolve();
+    const before = employee.person;
+    const person = await this.client.person.update({
+      where: { id: employee.personId },
+      data: {
+        email: dto.email,
+        phone: dto.phone,
+        mobileMoneyProvider: dto.mobileMoneyProvider,
+        mobileMoneyNumber: dto.mobileMoneyNumber,
+      },
+    });
+    await this.audit.log({
+      action: 'EMPLOYEE_PROFILE_SELF_UPDATED',
+      entityType: 'Person',
+      entityId: person.id,
+      before,
+      after: person,
+    });
+    return person;
   }
 
   async update(id: string, dto: Partial<CreateEmployeeDto>) {

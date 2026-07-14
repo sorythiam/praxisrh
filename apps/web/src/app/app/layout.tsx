@@ -67,6 +67,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <NavLink href="/app/me/pointeuse">Pointeuse</NavLink>
               <NavLink href="/app/me/leave">Mes congés</NavLink>
               <NavLink href="/app/me/payslips">Mes bulletins</NavLink>
+              <NavLink href="/app/me/profile">Mon profil</NavLink>
             </>
           )}
         </nav>

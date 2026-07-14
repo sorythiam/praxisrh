@@ -7,6 +7,7 @@ import { Roles } from '../../core/auth/roles.decorator';
 import { RequireModule } from '../../core/auth/require-module.decorator';
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleGuard)
 @RequireModule(ModuleCode.RH)
@@ -30,6 +31,18 @@ export class EmployeesController {
   @Get('alerts')
   getAlerts() {
     return this.employeesService.getComplianceAlerts();
+  }
+
+  @Roles(Role.EMPLOYEE, Role.MANAGER)
+  @Get('me/profile')
+  getMyProfile() {
+    return this.employeesService.getMyProfile();
+  }
+
+  @Roles(Role.EMPLOYEE, Role.MANAGER)
+  @Patch('me/profile')
+  updateMyProfile(@Body() dto: UpdateProfileDto) {
+    return this.employeesService.updateMyProfile(dto);
   }
 
   @Roles(Role.HR_ADMIN, Role.COMPANY_ADMIN, Role.MANAGER)

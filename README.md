@@ -75,6 +75,21 @@ Web app: http://localhost:3000 · API: http://localhost:4000/api
 > `nest build`, `next build`) were all verified directly and pass; test
 > `docker compose build` on first deploy.
 
+## Tests
+
+```bash
+npm run test:e2e --workspace=apps/api
+```
+
+Provisions a disposable `praxis_test` database, applies migrations and
+RLS, then runs `test/tenant-isolation.e2e-spec.ts` — an automated proof
+of the spec's non-negotiable isolation requirement (section 5.4), at
+three layers: HTTP (tenant B can't list or fetch-by-id tenant A's data),
+module gating (a tenant without a module gets refused, not shown an
+empty screen), and database (a raw connection with no tenant session
+variable set gets zero rows from a table that has data — proving RLS
+holds even if the application layer is ever bypassed).
+
 ## Repository layout
 
 ```
