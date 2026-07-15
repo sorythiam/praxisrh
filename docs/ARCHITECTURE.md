@@ -83,12 +83,45 @@ than a model: a flag always states which rule fired and why, which is
 what the spec's acceptance criteria require ("chaque alerte explique la
 raison de la détection").
 
-## What's deliberately out of scope for Phase 1
+## Phase 2 — talents, performance, recruitment
 
-Per the user's explicit scoping decision for this build: Phase 2 of the
-roadmap (talents/évolution de carrière, OKR, recrutement, formation,
-engagement, and the AI features from section 7 beyond anomaly
-detection) is not implemented. Adding it means new `rh/talents`,
-`rh/performance`, `rh/recruitment` etc. modules following the same
-Core/module pattern — no changes to the tenant isolation or auth
-mechanisms are needed to add them.
+Built on top of Phase 1 with no changes to the tenant isolation or auth
+mechanisms — `src/rh/talents`, `src/rh/performance` and
+`src/rh/recruitment` are ordinary RH sub-modules gated by the same
+`ModuleCode.RH` as everything else:
+
+- **Talents** (section 6.12): a `Competence` catalogue, per-employee
+  skill levels, an internal-mobility marketplace (`PosteInterne` with
+  required competencies an employee can apply to), individual
+  development plans, and succession planning for key roles. Eligibility
+  and succession-candidate ranking are deterministic, explainable
+  competence-match percentages — same philosophy as payroll anomaly
+  detection (section 7.3): every number traces to which competencies
+  matched and which didn't, not an opaque model score.
+- **Performance/OKR** (6.13): objectives with key results, continuous
+  peer/manager/self feedback with no artificial history limit (the spec
+  explicitly calls out wanting the full history at review time, not
+  just the last three months), and review cycles with a calibration
+  step. `PerformanceService.upsertReview` calls
+  `TalentsService.appendNoteFromReview` when a manager leaves comments —
+  the concrete implementation of the spec's "chaque évaluation alimente
+  automatiquement le module Talents" requirement.
+- **Recruitment/ATS** (6.14): job postings and a candidate pipeline.
+  `RecruitmentService.hire` calls `EmployeesService.create` directly
+  with the candidate's name/email/phone already on file — the same
+  "sans aucune ressaisie" guarantee the spec calls for, achieved by
+  reuse rather than a parallel employee-creation code path.
+
+## Formation and Engagement — schema present, not built
+
+`ActionFormation`/`FormationEnrollment` (6.15) and
+`EnqueteEngagement`/`PulseSurveyResponse` (6.16) exist in
+`prisma/schema.prisma`, tenant-scoped and RLS-protected like everything
+else, but have no service or controller yet. Unlike IPM/Pack Intérim,
+these aren't separate `ModuleCode`s — they're RH sub-features that would
+be gated by the same `ModuleCode.RH` already exercised by every other
+RH endpoint, so a placeholder controller here wouldn't prove anything
+new the way `src/ipm/ipm.controller.ts` proves cross-module gating. The
+integration point is already in place: `DevelopmentPlan.recommendedActions`
+(Talents) is exactly where a built-out Formation module would plug in
+concrete training recommendations instead of free-text labels.

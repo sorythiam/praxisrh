@@ -21,6 +21,9 @@ import { TimeclockModule } from './rh/timeclock/timeclock.module';
 import { LeaveModule } from './rh/leave/leave.module';
 import { PayrollModule } from './rh/payroll/payroll.module';
 import { RhDashboardModule } from './rh/dashboard/dashboard.module';
+import { TalentsModule } from './rh/talents/talents.module';
+import { PerformanceModule } from './rh/performance/performance.module';
+import { RecruitmentModule } from './rh/recruitment/recruitment.module';
 import { IpmModule } from './ipm/ipm.module';
 import { InterimModule } from './interim/interim.module';
 
@@ -42,6 +45,9 @@ import { InterimModule } from './interim/interim.module';
     LeaveModule,
     PayrollModule,
     RhDashboardModule,
+    TalentsModule,
+    PerformanceModule,
+    RecruitmentModule,
     IpmModule,
     InterimModule,
   ],

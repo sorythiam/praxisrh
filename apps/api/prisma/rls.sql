@@ -27,7 +27,13 @@ DECLARE
     'payout_batches', 'payout_items', 'ipm_beneficiaries',
     'ipm_contributions', 'ipm_providers', 'ipm_reimbursement_cases',
     'interim_missions', 'interim_assignments', 'interim_timesheets',
-    'interim_advances'
+    'interim_advances', 'competences', 'employee_competences',
+    'postes_internes', 'poste_interne_requirements',
+    'poste_interne_applications', 'development_plans', 'succession_plans',
+    'succession_candidates', 'objectives', 'key_results',
+    'feedback_entries', 'review_cycles', 'performance_reviews',
+    'job_postings', 'candidates', 'job_applications', 'actions_formation',
+    'formation_enrollments', 'enquetes_engagement', 'pulse_survey_responses'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP

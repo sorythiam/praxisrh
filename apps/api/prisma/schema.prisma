@@ -11,10 +11,11 @@
 //     prisma/rls.sql) are enabled on every tenant-scoped table as a
 //     backstop, keyed on the `app.tenant_id` session variable set by the
 //     API for the duration of each request transaction.
-//  3. IPM and Pack Intérim models are present here (so the schema never
-//     needs a breaking migration when those modules are built) but their
-//     business logic is intentionally NOT implemented in Phase 1 — see
-//     docs/ARCHITECTURE.md.
+//  3. IPM, Pack Intérim, Formation and Engagement models are present
+//     here (so the schema never needs a breaking migration when those
+//     are built) but their business logic is intentionally not
+//     implemented yet — see docs/ARCHITECTURE.md. Talents, Performance/
+//     OKR and Recruitment (Phase 2) ARE fully implemented.
 
 generator client {
   provider = "prisma-client-js"
@@ -73,6 +74,8 @@ model Tenant {
   auditLogs         AuditLog[]
   notifications     Notification[]
   paymentTransactions PaymentTransaction[]
+  competences       Competence[]
+  postesInternes    PosteInterne[]
 
   @@map("tenants")
 }
@@ -88,6 +91,7 @@ model Establishment {
 
   employees Employee[]
   shifts    Shift[]
+  jobPostings JobPosting[]
 
   @@index([tenantId])
   @@map("establishments")
@@ -310,6 +314,13 @@ model Employee {
   leaveRequests  LeaveRequest[]
   payslipLines   PayslipLine[]
   payslips       Payslip[]
+  competences          EmployeeCompetence[]
+  posteInterneApplications PosteInterneApplication[]
+  developmentPlans     DevelopmentPlan[]
+  successionCandidacies SuccessionCandidate[]
+  objectives           Objective[]
+  feedbackReceived     Feedback[]
+  performanceReviews   PerformanceReview[]
 
   @@unique([tenantId, employeeNumber])
   @@index([tenantId])
@@ -572,6 +583,326 @@ model PayoutItem {
 }
 
 // ---------------------------------------------------------------------
+// Praxis RH — Phase 2 (talents & évolution de carrière, section 6.12;
+// performance & OKR, 6.13; recrutement/ATS, 6.14). Fully implemented,
+// same tenant-isolation guarantees as the rest of Praxis RH.
+// ---------------------------------------------------------------------
+
+model Competence {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  category  String?
+  createdAt DateTime @default(now())
+
+  employeeCompetences EmployeeCompetence[]
+  posteRequirements   PosteInterneRequirement[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("competences")
+}
+
+model EmployeeCompetence {
+  id           String     @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  competenceId String
+  competence   Competence @relation(fields: [competenceId], references: [id], onDelete: Cascade)
+  level        Int // 1-5
+  assessedAt   DateTime   @default(now())
+
+  @@unique([employeeId, competenceId])
+  @@index([tenantId])
+  @@map("employee_competences")
+}
+
+enum PosteInterneStatus {
+  OPEN
+  FILLED
+  ARCHIVED
+}
+
+model PosteInterne {
+  id           String              @id @default(uuid())
+  tenantId     String
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  title        String
+  department   String?
+  isKeyRole    Boolean             @default(false)
+  status       PosteInterneStatus  @default(OPEN)
+  description  String?
+  createdAt    DateTime            @default(now())
+
+  requirements   PosteInterneRequirement[]
+  applications   PosteInterneApplication[]
+  successionPlan SuccessionPlan?
+  developmentPlans DevelopmentPlan[]
+
+  @@index([tenantId])
+  @@map("postes_internes")
+}
+
+model PosteInterneRequirement {
+  id             String       @id @default(uuid())
+  tenantId       String
+  posteInterneId String
+  posteInterne   PosteInterne @relation(fields: [posteInterneId], references: [id], onDelete: Cascade)
+  competenceId   String
+  competence     Competence   @relation(fields: [competenceId], references: [id], onDelete: Cascade)
+  requiredLevel  Int // 1-5
+
+  @@unique([posteInterneId, competenceId])
+  @@index([tenantId])
+  @@map("poste_interne_requirements")
+}
+
+enum PosteInterneApplicationStatus {
+  INTERESSE
+  EN_EVALUATION
+  RETENU
+  REJETE
+}
+
+model PosteInterneApplication {
+  id             String                          @id @default(uuid())
+  tenantId       String
+  posteInterneId String
+  posteInterne   PosteInterne                    @relation(fields: [posteInterneId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee                        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  status         PosteInterneApplicationStatus   @default(INTERESSE)
+  message        String?
+  createdAt      DateTime                        @default(now())
+
+  @@unique([posteInterneId, employeeId])
+  @@index([tenantId])
+  @@map("poste_interne_applications")
+}
+
+model DevelopmentPlan {
+  id                 String        @id @default(uuid())
+  tenantId           String
+  employeeId         String
+  employee           Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  targetPosteInterneId String?
+  targetPosteInterne PosteInterne? @relation(fields: [targetPosteInterneId], references: [id])
+  goals              String
+  recommendedActions Json? // [{label, type}] — free-form until Formation module consumes it
+  createdAt          DateTime      @default(now())
+  lastReviewedAt     DateTime?
+
+  @@index([tenantId])
+  @@map("development_plans")
+}
+
+enum SuccessionReadiness {
+  READY_NOW
+  READY_1_2_YEARS
+  READY_3_5_YEARS
+  DEVELOPING
+}
+
+model SuccessionPlan {
+  id                  String       @id @default(uuid())
+  tenantId            String
+  posteInterneId      String       @unique
+  posteInterne        PosteInterne @relation(fields: [posteInterneId], references: [id], onDelete: Cascade)
+  currentHolderEmployeeId String?
+  notes               String?
+  createdAt           DateTime     @default(now())
+
+  candidates SuccessionCandidate[]
+
+  @@index([tenantId])
+  @@map("succession_plans")
+}
+
+model SuccessionCandidate {
+  id               String              @id @default(uuid())
+  tenantId         String
+  successionPlanId String
+  successionPlan   SuccessionPlan      @relation(fields: [successionPlanId], references: [id], onDelete: Cascade)
+  employeeId       String
+  employee         Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  readiness        SuccessionReadiness @default(DEVELOPING)
+  notes            String?
+
+  @@unique([successionPlanId, employeeId])
+  @@index([tenantId])
+  @@map("succession_candidates")
+}
+
+enum ObjectiveType {
+  INDIVIDUAL
+  TEAM
+}
+
+enum ObjectiveStatus {
+  ON_TRACK
+  AT_RISK
+  COMPLETED
+}
+
+model Objective {
+  id          String          @id @default(uuid())
+  tenantId    String
+  employeeId  String?
+  employee    Employee?       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  teamName    String?
+  type        ObjectiveType
+  title       String
+  periodLabel String // e.g. "2026-Q1"
+  status      ObjectiveStatus @default(ON_TRACK)
+  createdAt   DateTime        @default(now())
+
+  keyResults KeyResult[]
+
+  @@index([tenantId])
+  @@map("objectives")
+}
+
+model KeyResult {
+  id           String    @id @default(uuid())
+  tenantId     String
+  objectiveId  String
+  objective    Objective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  description  String
+  targetValue  Float
+  currentValue Float     @default(0)
+  unit         String?
+
+  @@index([tenantId])
+  @@map("key_results")
+}
+
+enum FeedbackType {
+  PEER
+  MANAGER
+  SELF
+}
+
+model Feedback {
+  id            String       @id @default(uuid())
+  tenantId      String
+  fromUserId    String
+  toEmployeeId  String
+  toEmployee    Employee     @relation(fields: [toEmployeeId], references: [id], onDelete: Cascade)
+  type          FeedbackType
+  content       String
+  createdAt     DateTime     @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, toEmployeeId])
+  @@map("feedback_entries")
+}
+
+enum ReviewCycleStatus {
+  OPEN
+  CALIBRATION
+  CLOSED
+}
+
+model ReviewCycle {
+  id          String            @id @default(uuid())
+  tenantId    String
+  periodLabel String
+  startDate   DateTime
+  endDate     DateTime
+  status      ReviewCycleStatus @default(OPEN)
+
+  reviews PerformanceReview[]
+
+  @@unique([tenantId, periodLabel])
+  @@index([tenantId])
+  @@map("review_cycles")
+}
+
+model PerformanceReview {
+  id                String      @id @default(uuid())
+  tenantId          String
+  reviewCycleId     String
+  reviewCycle       ReviewCycle @relation(fields: [reviewCycleId], references: [id], onDelete: Cascade)
+  employeeId        String
+  employee          Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  selfScore         Float?
+  managerScore       Float?
+  managerComments   String?
+  calibratedScore   Float?
+
+  @@unique([reviewCycleId, employeeId])
+  @@index([tenantId])
+  @@map("performance_reviews")
+}
+
+enum JobPostingStatus {
+  OPEN
+  CLOSED
+}
+
+model JobPosting {
+  id              String           @id @default(uuid())
+  tenantId        String
+  title           String
+  department      String?
+  establishmentId String?
+  establishment   Establishment?   @relation(fields: [establishmentId], references: [id])
+  description     String?
+  status          JobPostingStatus @default(OPEN)
+  createdAt       DateTime         @default(now())
+
+  applications JobApplication[]
+
+  @@index([tenantId])
+  @@map("job_postings")
+}
+
+model Candidate {
+  id        String   @id @default(uuid())
+  tenantId  String
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  resumeUrl String?
+  createdAt DateTime @default(now())
+
+  applications JobApplication[]
+
+  @@index([tenantId])
+  @@map("candidates")
+}
+
+enum ApplicationStage {
+  APPLIED
+  SCREENING
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+}
+
+model JobApplication {
+  id              String           @id @default(uuid())
+  tenantId        String
+  jobPostingId    String
+  jobPosting      JobPosting       @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  candidateId     String
+  candidate       Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  stage           ApplicationStage @default(APPLIED)
+  recruiterUserId String?
+  hiredEmployeeId String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([jobPostingId, candidateId])
+  @@index([tenantId])
+  @@map("job_applications")
+}
+
+// ---------------------------------------------------------------------
 // Praxis IPM — schema scaffold only (Phase 3). Not wired to any service
 // or controller yet. Present here so activating the module later never
 // requires a breaking migration.
@@ -686,4 +1017,61 @@ model InterimAdvance {
 
   @@index([tenantId])
   @@map("interim_advances")
+}
+
+// ---------------------------------------------------------------------
+// Formation (section 6.15) & Engagement (6.16) — schema scaffold only,
+// same reasoning as the IPM/Interim scaffold above: present so the
+// modules activate without a migration later, not yet wired to a
+// service/controller. DevelopmentPlan.recommendedActions (Phase 2,
+// built above) is the natural integration point once this is built out.
+// ---------------------------------------------------------------------
+
+model ActionFormation {
+  id             String   @id @default(uuid())
+  tenantId       String
+  title          String
+  provider       String?
+  type           String   @default("INTERNAL") // INTERNAL | EXTERNAL
+  durationHours  Float?
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("actions_formation")
+}
+
+model FormationEnrollment {
+  id                     String    @id @default(uuid())
+  tenantId               String
+  employeeId             String
+  actionFormationId      String
+  status                 String    @default("ENROLLED")
+  completedAt            DateTime?
+  certificationExpiresAt DateTime?
+
+  @@index([tenantId])
+  @@map("formation_enrollments")
+}
+
+model EnqueteEngagement {
+  id       String   @id @default(uuid())
+  tenantId String
+  question String
+  sentAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("enquetes_engagement")
+}
+
+model PulseSurveyResponse {
+  id        String   @id @default(uuid())
+  tenantId  String
+  surveyId  String
+  teamName  String? // aggregation key — never the individual employee, per "aucun résultat individuel n'est identifiable"
+  score     Int
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("pulse_survey_responses")
 }

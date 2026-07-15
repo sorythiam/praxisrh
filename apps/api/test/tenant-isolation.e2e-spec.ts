@@ -144,6 +144,53 @@ describe('Tenant isolation (e2e)', () => {
     });
   });
 
+  describe('Phase 2 modules (talents, performance, recruitment)', () => {
+    it("tenant B's competence catalogue never includes a competence tenant A created", async () => {
+      const uniqueSuffix = Date.now();
+      const competenceName = `Compétence secrète de A ${uniqueSuffix}`;
+      await request(app.getHttpServer())
+        .post('/api/rh/talents/competences')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: competenceName })
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .get('/api/rh/talents/competences')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .expect(200);
+      expect(JSON.stringify(res.body)).not.toContain(competenceName);
+    });
+
+    it("tenant B cannot fetch tenant A's internal job posting by id", async () => {
+      const posting = await request(app.getHttpServer())
+        .post('/api/rh/talents/postes')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ title: 'Poste secret de A', requirements: [] })
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/rh/talents/postes/${posting.body.id}`)
+        .set('Authorization', `Bearer ${tokenB}`);
+      expect(res.status).not.toBe(200);
+    });
+
+    it("tenant B's job postings list never includes tenant A's posting", async () => {
+      const uniqueSuffix = Date.now();
+      const title = `Poste ouvert chez A ${uniqueSuffix}`;
+      await request(app.getHttpServer())
+        .post('/api/rh/recruitment/postings')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ title })
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .get('/api/rh/recruitment/postings')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .expect(200);
+      expect(JSON.stringify(res.body)).not.toContain(title);
+    });
+  });
+
   describe('Database layer (Row-Level Security backstop)', () => {
     it('a raw connection with no app.tenant_id session variable sees zero rows from a tenant-scoped table that has data', async () => {
       // Deliberately bypasses both the Prisma Client Extension and the

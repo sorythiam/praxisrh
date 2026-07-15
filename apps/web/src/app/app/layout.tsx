@@ -51,6 +51,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <NavLink href="/app/planning">Planning</NavLink>
               <NavLink href="/app/leave">Congés</NavLink>
               <NavLink href="/app/payroll">Paie</NavLink>
+              <NavLink href="/app/talents">Talents</NavLink>
+              <NavLink href="/app/performance">Performance</NavLink>
+              <NavLink href="/app/recruitment">Recrutement</NavLink>
               <NavLink href="/app/settings">Paramètres</NavLink>
             </>
           )}
@@ -67,6 +70,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <NavLink href="/app/me/pointeuse">Pointeuse</NavLink>
               <NavLink href="/app/me/leave">Mes congés</NavLink>
               <NavLink href="/app/me/payslips">Mes bulletins</NavLink>
+              <NavLink href="/app/me/talents">Mon évolution</NavLink>
+              <NavLink href="/app/me/performance">Ma performance</NavLink>
               <NavLink href="/app/me/profile">Mon profil</NavLink>
             </>
           )}

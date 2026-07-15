@@ -1,28 +1,36 @@
 # Roadmap — phases 2 to 4
 
 Phase 1 (this repository) delivers the multi-tenant core and a complete
-Praxis RH module. This is what remains, per the source spec (section
-13), in the order it should be built — each phase builds only on what
-Phase 1 already established, so none of it requires revisiting the
-tenant isolation, auth, or module-activation mechanisms.
+Praxis RH module. Phase 2's people-development loop — talents,
+performance/OKR, recruitment — is also built and tested. This is what
+remains, per the source spec (section 13), in the order it should be
+built — each phase builds only on what's already established, so none
+of it requires revisiting the tenant isolation, auth, or
+module-activation mechanisms.
 
 ## Phase 2 — Praxis RH avancé (2–3 mois)
 
-Extends the RH module already in this repo with:
-
-- **Talents & évolution de carrière** (section 6.12): skills mapping,
+- ✅ **Talents & évolution de carrière** (section 6.12): skills mapping,
   internal mobility marketplace, individual development plans,
-  succession planning for key roles.
-- **Performance & OKR** (6.13): individual/team goals, continuous
-  feedback, calibrated review cycles.
-- **Recrutement / ATS** (6.14): job postings, scored applications,
-  candidate → employee conversion re-using `EmployeesService.create`.
-- **Formation** (6.15): catalogue, recommendations derived from the
-  skills-gap data from Talents.
-- **Engagement** (6.16): pulse surveys, eNPS, anonymized by design.
-- **First AI services** (7.1, 7.2, 7.3 beyond the anomaly rules already
-  shipped): HR assistant for contract/letter generation, WhatsApp
-  employee chatbot, refining payroll anomaly detection.
+  succession planning for key roles — `src/rh/talents`.
+- ✅ **Performance & OKR** (6.13): individual/team goals, continuous
+  feedback, calibrated review cycles, feeding back into Talents —
+  `src/rh/performance`.
+- ✅ **Recrutement / ATS** (6.14): job postings, candidate pipeline,
+  candidate → employee conversion re-using `EmployeesService.create`
+  with zero re-entry — `src/rh/recruitment`.
+- ⬜ **Formation** (6.15): catalogue, recommendations derived from the
+  skills-gap data from Talents. Schema present
+  (`ActionFormation`/`FormationEnrollment`), not built — see
+  docs/ARCHITECTURE.md.
+- ⬜ **Engagement** (6.16): pulse surveys, eNPS, anonymized by design.
+  Schema present (`EnqueteEngagement`/`PulseSurveyResponse`), not built.
+- ⬜ **First AI services beyond the anomaly rules already shipped**
+  (7.1, 7.2): HR assistant for contract/letter generation, WhatsApp
+  employee chatbot. Not built — would need an actual LLM integration
+  (the codebase has no external AI provider wired in yet); the payroll
+  anomaly detection in section 7.3 is already implemented as
+  deterministic, explainable rules.
 
 Exit criterion (spec): Praxis RH is a complete SIRH comparable to
 category leaders, augmented with talent and AI features.

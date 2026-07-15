@@ -9,10 +9,15 @@ working code end to end (not a mockup): the multi-tenant core (auth,
 roles, module activation, subscription) and a complete Praxis RH module
 (employee lifecycle, planning, offline-first timeclock, leave, payroll
 generation with a Senegal country-rules engine, payslip distribution,
-mobile money payout). Praxis IPM and Pack Intérim are present in the
-data model and module-activation system but not yet built out — see
+mobile money payout) — plus **Phase 2's** people-development loop:
+talents & internal mobility with competence-match eligibility scoring,
+performance/OKR with continuous feedback and calibrated review cycles,
+and a recruitment ATS whose hiring flow converts a candidate straight
+into a full employee account with zero re-entry. Formation, Engagement,
+Praxis IPM and Pack Intérim are present in the data model and
+module-activation system but not yet built out — see
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for what that means
-concretely and [docs/ROADMAP.md](docs/ROADMAP.md) for phases 2–4.
+concretely and [docs/ROADMAP.md](docs/ROADMAP.md) for what's left.
 
 ## Stack
 

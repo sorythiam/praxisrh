@@ -37,6 +37,16 @@ const WHERE_OPS = new Set([
  * types for the latter don't expose `$extends` even though it works
  * correctly at runtime (this is Prisma's client-extension pattern,
  * applied to a transaction client rather than the top-level client).
+ *
+ * IMPORTANT LIMITATION: `$allOperations` only fires for the top-level
+ * operation you call — a nested write like
+ * `parent.create({ data: { children: { create: [...] } } })` does NOT
+ * get intercepted for the nested `children` rows, so a tenant-scoped
+ * child model written this way would reach the database without
+ * `tenantId` and fail its NOT NULL constraint (fails closed, but avoid
+ * it). Write tenant-scoped children as a separate top-level `create`/
+ * `createMany` call instead — see TalentsService.createPoste for the
+ * pattern.
  */
 export function withTenantScoping(client: any, tenantId: string): PrismaClient {
   return client.$extends({
