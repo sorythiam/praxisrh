@@ -61,6 +61,11 @@ async function main() {
       update: { isActive: true },
       create: { tenantId: tenant.id, moduleCode: 'RH' },
     });
+    await tx.moduleActivation.upsert({
+      where: { tenantId_moduleCode: { tenantId: tenant.id, moduleCode: 'IPM' } },
+      update: { isActive: true },
+      create: { tenantId: tenant.id, moduleCode: 'IPM' },
+    });
 
     const establishment = await tx.establishment.upsert({
       where: { id: '00000000-0000-0000-0000-000000000010' },
@@ -208,11 +213,126 @@ async function main() {
       },
     });
 
+    // -- IPM gestionnaire --
+    const ipmPerson = await tx.person.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000060' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000060',
+        tenantId: tenant.id,
+        firstName: 'Astou',
+        lastName: 'Diagne',
+        email: 'ipm@demo.praxis',
+      },
+    });
+    await tx.user.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000061' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000061',
+        tenantId: tenant.id,
+        personId: ipmPerson.id,
+        email: 'ipm@demo.praxis',
+        passwordHash,
+        role: 'IPM_MANAGER',
+      },
+    });
+
+    // -- Praxis IPM demo data: adherent, dependent, provider, cap, dossier --
+    const ipmBeneficiary = await tx.ipmBeneficiary.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000070' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000070',
+        tenantId: tenant.id,
+        employeeId: employee.id,
+        cardNumber: 'IPM-00000001',
+        coverageRatePercent: 80,
+      },
+    });
+    await tx.ipmDependent.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000071' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000071',
+        tenantId: tenant.id,
+        beneficiaryId: ipmBeneficiary.id,
+        firstName: 'Omar',
+        lastName: 'Sow',
+        dateOfBirth: new Date('2020-03-15'),
+        relationship: 'ENFANT',
+        cardNumber: 'IPM-00000002',
+      },
+    });
+    await tx.ipmContribution.upsert({
+      where: { beneficiaryId_periodYear_periodMonth: { beneficiaryId: ipmBeneficiary.id, periodYear: 2026, periodMonth: 6 } },
+      update: {},
+      create: {
+        tenantId: tenant.id,
+        beneficiaryId: ipmBeneficiary.id,
+        periodYear: 2026,
+        periodMonth: 6,
+        grossSalaryFcfa: 150000,
+        assietteFcfa: 150000,
+        ratePercent: 10,
+        employerShareFcfa: 10000,
+        employeeShareFcfa: 5000,
+        status: 'PAID',
+      },
+    });
+
+    const ipmProvider = await tx.ipmProvider.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000080' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000080',
+        tenantId: tenant.id,
+        name: 'Clinique du Plateau',
+        category: 'Clinique',
+        address: 'Avenue Léopold Sédar Senghor, Dakar',
+        phone: '+221338000000',
+      },
+    });
+    await tx.ipmTariff.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000081' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000081',
+        tenantId: tenant.id,
+        providerId: ipmProvider.id,
+        actCode: 'CONS-GEN',
+        actLabel: 'Consultation généraliste',
+        tariffFcfa: 10000,
+      },
+    });
+
+    await tx.ipmAnnualCap.upsert({
+      where: { tenantId_category: { tenantId: tenant.id, category: 'PHARMACIE' } },
+      update: {},
+      create: { tenantId: tenant.id, category: 'PHARMACIE', annualCapFcfa: 150000 },
+    });
+
+    await tx.ipmReimbursementCase.upsert({
+      where: { tenantId_beneficiaryId_invoiceNumber: { tenantId: tenant.id, beneficiaryId: ipmBeneficiary.id, invoiceNumber: 'FAC-DEMO-001' } },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000090',
+        tenantId: tenant.id,
+        beneficiaryId: ipmBeneficiary.id,
+        category: 'PHARMACIE',
+        invoiceNumber: 'FAC-DEMO-001',
+        providerName: 'Pharmacie du Plateau',
+        amountClaimedFcfa: 20000,
+        status: 'SUBMITTED',
+      },
+    });
+
     console.log('Demo tenant seeded:');
     console.log('  Company admin : admin@demo.praxis /', DEMO_PASSWORD);
     console.log('  HR admin      : drh@demo.praxis /', DEMO_PASSWORD);
     console.log('  Manager       : manager@demo.praxis /', DEMO_PASSWORD);
     console.log('  Employee      : employe@demo.praxis /', DEMO_PASSWORD);
+    console.log('  IPM manager   : ipm@demo.praxis /', DEMO_PASSWORD);
   });
 }
 

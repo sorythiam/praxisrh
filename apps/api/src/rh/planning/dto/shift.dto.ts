@@ -1,4 +1,5 @@
-import { IsDateString, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMinSize, IsArray, IsDateString, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 export class CreateShiftDto {
   @IsString()
@@ -19,9 +20,16 @@ export class CreateShiftDto {
 }
 
 export class BulkCreateShiftsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateShiftDto)
   shifts!: CreateShiftDto[];
 }
 
 export class PublishShiftsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
   shiftIds!: string[];
 }

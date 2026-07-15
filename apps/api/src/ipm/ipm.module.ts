@@ -1,7 +1,11 @@
 import { Module } from '@nestjs/common';
-import { IpmController } from './ipm.controller';
+import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
+import { ContributionsModule } from './contributions/contributions.module';
+import { ProvidersModule } from './providers/providers.module';
+import { ReimbursementsModule } from './reimbursements/reimbursements.module';
+import { IpmDashboardModule } from './dashboard/dashboard.module';
 
 @Module({
-  controllers: [IpmController],
+  imports: [BeneficiariesModule, ContributionsModule, ProvidersModule, ReimbursementsModule, IpmDashboardModule],
 })
 export class IpmModule {}

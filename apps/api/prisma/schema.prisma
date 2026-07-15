@@ -321,6 +321,7 @@ model Employee {
   objectives           Objective[]
   feedbackReceived     Feedback[]
   performanceReviews   PerformanceReview[]
+  ipmBeneficiary       IpmBeneficiary?
 
   @@unique([tenantId, employeeNumber])
   @@index([tenantId])
@@ -903,37 +904,89 @@ model JobApplication {
 }
 
 // ---------------------------------------------------------------------
-// Praxis IPM — schema scaffold only (Phase 3). Not wired to any service
-// or controller yet. Present here so activating the module later never
-// requires a breaking migration.
+// Praxis IPM (section 8) — fully modeled and implemented in
+// src/ipm. Built on top of Praxis RH (Employee, PayslipLine, LeaveRequest,
+// PayoutsService) per the interconnections in section 10 — see
+// docs/ARCHITECTURE.md for which direction each dependency runs.
 // ---------------------------------------------------------------------
 
+enum IpmCardStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+// One beneficiary record per employee affiliated with the IPM — the
+// "salarié" in section 8.1. `cardStatus` is the manually-set status
+// (a gestionnaire can suspend/revoke directly); the *effective* status
+// also folds in the linked employee's current employment status
+// (section 10.2), computed at read time in IpmService rather than kept
+// eagerly in sync, since a suspended contract must never leave a stale
+// "ACTIVE" card behind.
 model IpmBeneficiary {
-  id           String   @id @default(uuid())
-  tenantId     String
-  personId     String
-  employeeId   String?
-  cardNumber   String
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id                  String        @id @default(uuid())
+  tenantId            String
+  employeeId          String        @unique
+  employee            Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  cardNumber          String
+  cardStatus          IpmCardStatus @default(ACTIVE)
+  suspendedAt         DateTime?
+  suspensionReason    String?
+  coverageRatePercent Int           @default(80)
+  createdAt           DateTime      @default(now())
+
+  dependents         IpmDependent[]
+  contributions      IpmContribution[]
+  reimbursementCases IpmReimbursementCase[]
 
   @@unique([tenantId, cardNumber])
   @@index([tenantId])
   @@map("ipm_beneficiaries")
 }
 
+enum IpmDependentRelationship {
+  CONJOINT
+  ENFANT
+  AUTRE
+}
+
+model IpmDependent {
+  id            String                   @id @default(uuid())
+  tenantId      String
+  beneficiaryId String
+  beneficiary   IpmBeneficiary           @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  firstName     String
+  lastName      String
+  dateOfBirth   DateTime?
+  relationship  IpmDependentRelationship
+  cardNumber    String
+  isActive      Boolean                  @default(true)
+  createdAt     DateTime                 @default(now())
+
+  @@unique([tenantId, cardNumber])
+  @@index([tenantId])
+  @@map("ipm_dependents")
+}
+
+// "L'assiette de cotisation IPM alimentée par la paie réelle" (10.1):
+// grossSalaryFcfa is read directly from that period's PayslipLine, never
+// re-entered; assietteFcfa is the same figure capped at the plafond.
 model IpmContribution {
-  id           String   @id @default(uuid())
-  tenantId     String
-  employeeId   String
-  periodYear   Int
-  periodMonth  Int
-  baseFcfa     Int
-  rate         Float
+  id                String   @id @default(uuid())
+  tenantId          String
+  beneficiaryId     String
+  beneficiary       IpmBeneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  periodYear        Int
+  periodMonth       Int
+  grossSalaryFcfa   Int
+  assietteFcfa      Int
+  ratePercent       Float
   employerShareFcfa Int
   employeeShareFcfa Int
-  createdAt    DateTime @default(now())
+  status            String  @default("DUE") // DUE | PAID | LATE
+  createdAt         DateTime @default(now())
 
+  @@unique([beneficiaryId, periodYear, periodMonth])
   @@index([tenantId])
   @@map("ipm_contributions")
 }
@@ -942,22 +995,88 @@ model IpmProvider {
   id        String   @id @default(uuid())
   tenantId  String
   name      String
-  category  String
+  category  String // PHARMACIE | CLINIQUE | DENTAIRE | OPTIQUE | LABORATOIRE | AUTRE
+  address   String?
+  phone     String?
   createdAt DateTime @default(now())
+
+  tariffs IpmTariff[]
 
   @@index([tenantId])
   @@map("ipm_providers")
 }
 
-model IpmReimbursementCase {
-  id           String   @id @default(uuid())
-  tenantId     String
-  beneficiaryId String
-  status       String   @default("SUBMITTED")
-  amountClaimedFcfa Int
-  amountApprovedFcfa Int?
-  createdAt    DateTime @default(now())
+model IpmTariff {
+  id            String      @id @default(uuid())
+  tenantId      String
+  providerId    String
+  provider      IpmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  actCode       String
+  actLabel      String
+  tariffFcfa    Int
+  effectiveFrom DateTime    @default(now())
 
+  @@index([tenantId])
+  @@map("ipm_tariffs")
+}
+
+enum IpmCapCategory {
+  DENTAIRE
+  OPTIQUE
+  HOSPITALISATION
+  PHARMACIE
+  AUTRE
+}
+
+// Per-tenant annual ceiling by care category (section 8.5). A tenant
+// with no row for a category is treated as uncapped for it — configure
+// explicitly rather than silently defaulting to a number nobody chose.
+model IpmAnnualCap {
+  id            String         @id @default(uuid())
+  tenantId      String
+  category      IpmCapCategory
+  annualCapFcfa Int
+
+  @@unique([tenantId, category])
+  @@index([tenantId])
+  @@map("ipm_annual_caps")
+}
+
+enum IpmCaseStatus {
+  SUBMITTED
+  PENDING_MEDICAL_REVIEW
+  APPROVED
+  REJECTED
+  PAID
+}
+
+model IpmReimbursementCase {
+  id                    String        @id @default(uuid())
+  tenantId              String
+  beneficiaryId         String
+  beneficiary           IpmBeneficiary @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  dependentId           String?
+  category              IpmCapCategory
+  invoiceNumber         String
+  providerName          String?
+  amountClaimedFcfa     Int
+  amountApprovedFcfa    Int?
+  status                IpmCaseStatus  @default(SUBMITTED)
+  documentUrls          Json? // uploaded invoice/prescription photos — see StorageService
+  rejectionReasonCode   String?
+  justifiesAbsenceFrom  DateTime? // section 10.3: maladie/hospitalisation -> RH absence justification
+  justifiesAbsenceTo    DateTime?
+  linkedLeaveRequestId  String?
+  reviewedBy            String?
+  reviewedAt            DateTime?
+  paymentTransactionId  String?       @unique
+  createdAt             DateTime      @default(now())
+
+  // "Un même numéro de facture ne peut être soumis deux fois pour le
+  // même bénéficiaire" (section 8.5 acceptance criteria) — scoped to
+  // the beneficiary, not tenant-wide, since two different employees
+  // could legitimately have same-numbered invoices from different visits.
+  @@unique([tenantId, beneficiaryId, invoiceNumber])
   @@index([tenantId])
   @@map("ipm_reimbursement_cases")
 }

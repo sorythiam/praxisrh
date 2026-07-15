@@ -4,18 +4,24 @@ Plateforme SaaS multi-tenant de gestion des ressources humaines et de la
 protection sociale pour l'Afrique de l'Ouest — Praxis RH, Praxis IPM et
 Pack Intérim, modulaires et souscriptibles indépendamment.
 
-This repository contains **Phase 1** of the roadmap, built to be real,
+This repository contains **Phases 1–3** of the roadmap, built to be real,
 working code end to end (not a mockup): the multi-tenant core (auth,
 roles, module activation, subscription) and a complete Praxis RH module
 (employee lifecycle, planning, offline-first timeclock, leave, payroll
 generation with a Senegal country-rules engine, payslip distribution,
-mobile money payout) — plus **Phase 2's** people-development loop:
-talents & internal mobility with competence-match eligibility scoring,
+mobile money payout) — **Phase 2's** people-development loop: talents &
+internal mobility with competence-match eligibility scoring,
 performance/OKR with continuous feedback and calibrated review cycles,
 and a recruitment ATS whose hiring flow converts a candidate straight
-into a full employee account with zero re-entry. Formation, Engagement,
-Praxis IPM and Pack Intérim are present in the data model and
-module-activation system but not yet built out — see
+into a full employee account with zero re-entry — and **Phase 3, Praxis
+IPM**: adherent/card lifecycle, cotisations generated from real Praxis RH
+payroll, a provider network with a tiers-payant eligibility check,
+reimbursement claims with duplicate-invoice and annual-plafond anti-fraud
+enforcement plus a second medical-review step for sensitive acts, mobile
+money payout through the same connector as salaries, and a sinistralité
+dashboard with ICAMO/consolidated-payroll exports. Formation, Engagement,
+and Pack Intérim are present in the data model and module-activation
+system but not yet built out — see
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for what that means
 concretely and [docs/ROADMAP.md](docs/ROADMAP.md) for what's left.
 
@@ -47,10 +53,12 @@ npm run dev:api    # http://localhost:4000
 npm run dev:web    # http://localhost:3000
 ```
 
-Seed data creates one demo tenant with four accounts (password `Demo1234!`
-for all): `admin@demo.praxis` (COMPANY_ADMIN), `drh@demo.praxis`
-(HR_ADMIN), `manager@demo.praxis` (MANAGER), `employe@demo.praxis`
-(EMPLOYEE).
+Seed data creates one demo tenant (RH + IPM modules active) with five
+accounts (password `Demo1234!` for all): `admin@demo.praxis`
+(COMPANY_ADMIN), `drh@demo.praxis` (HR_ADMIN), `manager@demo.praxis`
+(MANAGER), `employe@demo.praxis` (EMPLOYEE, already an IPM adherent with
+a dependent and a submitted reimbursement case to explore), and
+`ipm@demo.praxis` (IPM_MANAGER).
 
 ## Quick start (Docker Compose — self-hosted)
 

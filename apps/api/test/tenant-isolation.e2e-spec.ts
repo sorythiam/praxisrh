@@ -28,8 +28,10 @@ describe('Tenant isolation (e2e)', () => {
 
   let tokenA: string;
   let tokenB: string;
+  let tokenC: string;
   let tenantAId: string;
   let employeeAId: string;
+  let employeeBId: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -84,6 +86,35 @@ describe('Tenant isolation (e2e)', () => {
       })
       .expect(201);
     employeeAId = employeeA.body.employee.id;
+
+    const subC = await request(app.getHttpServer())
+      .post('/api/auth/subscribe')
+      .send({
+        companyName: `Isolation Test Co C ${uniqueSuffix}`,
+        adminFirstName: 'Admin',
+        adminLastName: 'C',
+        adminEmail: `admin-c-${uniqueSuffix}@test.praxis`,
+        password: 'Password123!',
+        modules: ['RH', 'IPM'],
+      })
+      .expect(201);
+    tokenC = subC.body.accessToken;
+
+    const employeeB = await request(app.getHttpServer())
+      .post('/api/rh/employees')
+      .set('Authorization', `Bearer ${tokenB}`)
+      .send({
+        firstName: 'Secret',
+        lastName: 'EmployeeOfB',
+        employeeNumber: `EMP-B-${uniqueSuffix}`,
+        position: 'Test position',
+        employmentCategory: 'employe',
+        hireDate: '2026-01-01',
+        contractType: 'CDI',
+        baseSalaryFcfa: 100000,
+      })
+      .expect(201);
+    employeeBId = employeeB.body.employee.id;
   });
 
   afterAll(async () => {
@@ -97,7 +128,6 @@ describe('Tenant isolation (e2e)', () => {
         .get('/api/rh/employees')
         .set('Authorization', `Bearer ${tokenB}`)
         .expect(200);
-      expect(res.body).toEqual([]);
       expect(JSON.stringify(res.body)).not.toContain(employeeAId);
     });
 
@@ -124,14 +154,14 @@ describe('Tenant isolation (e2e)', () => {
   describe('Module gating', () => {
     it('tenant A (RH only) is refused access to the IPM module', async () => {
       const res = await request(app.getHttpServer())
-        .get('/api/ipm/status')
+        .get('/api/ipm/beneficiaries')
         .set('Authorization', `Bearer ${tokenA}`);
       expect(res.status).toBe(403);
     });
 
     it('tenant B (RH + IPM) is granted access to the IPM module', async () => {
       await request(app.getHttpServer())
-        .get('/api/ipm/status')
+        .get('/api/ipm/beneficiaries')
         .set('Authorization', `Bearer ${tokenB}`)
         .expect(200);
     });
@@ -188,6 +218,62 @@ describe('Tenant isolation (e2e)', () => {
         .set('Authorization', `Bearer ${tokenB}`)
         .expect(200);
       expect(JSON.stringify(res.body)).not.toContain(title);
+    });
+  });
+
+  describe('Praxis IPM module', () => {
+    let beneficiaryBId: string;
+    let beneficiaryCardNumber: string;
+
+    it('tenant B can activate an IPM beneficiary for its own employee', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/ipm/beneficiaries')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ employeeId: employeeBId })
+        .expect(201);
+      beneficiaryBId = res.body.id;
+      beneficiaryCardNumber = res.body.cardNumber;
+      expect(beneficiaryCardNumber).toMatch(/^IPM-/);
+    });
+
+    it("tenant C's beneficiary list never includes tenant B's beneficiary", async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/ipm/beneficiaries')
+        .set('Authorization', `Bearer ${tokenC}`)
+        .expect(200);
+      expect(JSON.stringify(res.body)).not.toContain(beneficiaryBId);
+      expect(JSON.stringify(res.body)).not.toContain(beneficiaryCardNumber);
+    });
+
+    it("tenant C cannot fetch tenant B's beneficiary by id directly", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/ipm/beneficiaries/${beneficiaryBId}`)
+        .set('Authorization', `Bearer ${tokenC}`);
+      expect(res.status).not.toBe(200);
+    });
+
+    it("tenant C cannot look up tenant B's beneficiary by card number", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/ipm/providers/eligibility/${beneficiaryCardNumber}`)
+        .set('Authorization', `Bearer ${tokenC}`);
+      expect(res.status).not.toBe(200);
+    });
+
+    it('tenant B can configure an annual reimbursement cap', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/ipm/reimbursements/caps')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ category: 'PHARMACIE', annualCapFcfa: 100000 })
+        .expect(201);
+      expect(res.body.category).toBe('PHARMACIE');
+    });
+
+    it("tenant C's annual caps never include tenant B's configured cap", async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/ipm/reimbursements/caps')
+        .set('Authorization', `Bearer ${tokenC}`)
+        .expect(200);
+      expect(res.body.find((c: any) => c.category === 'PHARMACIE')).toBeUndefined();
     });
   });
 

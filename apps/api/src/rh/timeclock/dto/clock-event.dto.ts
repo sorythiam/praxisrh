@@ -1,4 +1,5 @@
-import { IsDateString, IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { ClockEventType } from '@praxis/shared';
 
 export class ClockEventInputDto {
@@ -25,5 +26,9 @@ export class ClockEventInputDto {
 }
 
 export class SyncClockEventsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => ClockEventInputDto)
   events!: ClockEventInputDto[];
 }

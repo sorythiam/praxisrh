@@ -1,4 +1,4 @@
-import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
 import { LeaveType } from '@praxis/shared';
 
 export class CreateLeaveRequestDto {
@@ -17,6 +17,7 @@ export class CreateLeaveRequestDto {
 }
 
 export class DecisionDto {
+  @IsBoolean()
   approve!: boolean;
 
   @IsOptional()

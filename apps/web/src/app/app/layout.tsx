@@ -38,6 +38,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const isAdmin = ADMIN_ROLES.includes(user.role);
   const isManager = user.role === Role.MANAGER;
   const isEmployeeLike = user.role === Role.EMPLOYEE || isManager;
+  const isIpmManager = isAdmin || user.role === Role.IPM_MANAGER;
 
   return (
     <div className="flex min-h-screen">
@@ -57,6 +58,16 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <NavLink href="/app/settings">Paramètres</NavLink>
             </>
           )}
+          {isIpmManager && (
+            <>
+              <div className="mt-4 px-3 text-xs font-semibold uppercase text-gray-400">Praxis IPM</div>
+              <NavLink href="/app/ipm">Tableau de bord</NavLink>
+              <NavLink href="/app/ipm/adherents">Adhérents</NavLink>
+              <NavLink href="/app/ipm/cotisations">Cotisations</NavLink>
+              <NavLink href="/app/ipm/prestataires">Prestataires</NavLink>
+              <NavLink href="/app/ipm/dossiers">Dossiers de remboursement</NavLink>
+            </>
+          )}
           {isManager && (
             <>
               <NavLink href="/app/planning">Planning équipe</NavLink>
@@ -72,6 +83,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <NavLink href="/app/me/payslips">Mes bulletins</NavLink>
               <NavLink href="/app/me/talents">Mon évolution</NavLink>
               <NavLink href="/app/me/performance">Ma performance</NavLink>
+              <NavLink href="/app/me/ipm">Ma couverture IPM</NavLink>
               <NavLink href="/app/me/profile">Mon profil</NavLink>
             </>
           )}

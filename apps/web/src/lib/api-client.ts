@@ -46,6 +46,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+async function upload<T>(path: string, file: File): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch(`/api${path}`, { method: 'POST', headers, body: form });
+  const isJson = res.headers.get('content-type')?.includes('application/json');
+  const body = isJson ? await res.json() : await res.text();
+  if (!res.ok) {
+    const message = isJson ? (body.message ?? JSON.stringify(body)) : body;
+    throw new ApiError(res.status, Array.isArray(message) ? message.join(', ') : message);
+  }
+  return body as T;
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path, { method: 'GET' }),
   post: <T>(path: string, data?: unknown) =>
@@ -53,6 +70,7 @@ export const api = {
   patch: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'PATCH', body: data !== undefined ? JSON.stringify(data) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  upload: <T>(path: string, file: File) => upload<T>(path, file),
 };
 
 export const fetcher = <T>(path: string) => api.get<T>(path);
