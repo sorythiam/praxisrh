@@ -41,6 +41,7 @@ enum Role {
   COMPANY_ADMIN
   HR_ADMIN
   IPM_MANAGER
+  INTERIM_MANAGER
   MANAGER
   EMPLOYEE
 }
@@ -322,6 +323,10 @@ model Employee {
   feedbackReceived     Feedback[]
   performanceReviews   PerformanceReview[]
   ipmBeneficiary       IpmBeneficiary?
+  interimAssignments   InterimAssignment[]
+  interimAdvances      InterimAdvance[]
+  interimIncidents     InterimIncident[]
+  interimBlacklistEntry InterimBlacklistEntry?
 
   @@unique([tenantId, employeeNumber])
   @@index([tenantId])
@@ -1082,60 +1087,190 @@ model IpmReimbursementCase {
 }
 
 // ---------------------------------------------------------------------
-// Pack Intérim — schema scaffold only (Phase 4). Requires RH module.
+// Pack Intérim (Phase 4). Requires RH module. An intérimaire is an
+// ordinary Employee (their CDD/PRESTATION contract with the staffing
+// tenant is unchanged) — these models only represent which client site
+// they're deployed to, not a parallel worker/contract concept.
 // ---------------------------------------------------------------------
 
+enum InterimMissionStatus {
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+
 model InterimMission {
-  id                String   @id @default(uuid())
-  tenantId          String
-  clientName        String
-  siteName          String
-  startDate         DateTime
-  endDate           DateTime?
+  id                     String   @id @default(uuid())
+  tenantId               String
+  clientName             String
+  clientContactName      String?
+  clientContactEmail     String?
+  clientContactPhone     String?
+  siteName               String
+  // Printed on a physical QR code at the client site; compared against
+  // what the intérimaire's app submits at clock-in to prove presence.
+  siteQrToken            String   @default(uuid())
+  startDate              DateTime
+  endDate                DateTime?
   billingRateFcfaPerHour Int
   payRateFcfaPerHour     Int
-  createdAt         DateTime @default(now())
+  status                 InterimMissionStatus @default(ACTIVE)
+  createdAt              DateTime @default(now())
+
+  assignments InterimAssignment[]
+  incidents   InterimIncident[]
+  invoices    InterimProformaInvoice[]
 
   @@index([tenantId])
   @@map("interim_missions")
 }
 
+enum InterimAssignmentStatus {
+  ACTIVE
+  ENDED
+}
+
 model InterimAssignment {
-  id          String   @id @default(uuid())
-  tenantId    String
-  missionId   String
-  employeeId  String
-  startDate   DateTime
-  endDate     DateTime?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  tenantId   String
+  missionId  String
+  mission    InterimMission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  startDate  DateTime
+  endDate    DateTime?
+  status     InterimAssignmentStatus @default(ACTIVE)
+  createdAt  DateTime @default(now())
+
+  timesheets InterimTimesheet[]
 
   @@index([tenantId])
   @@map("interim_assignments")
 }
 
-model InterimTimesheet {
-  id           String   @id @default(uuid())
-  tenantId     String
-  assignmentId String
-  date         DateTime
-  hours        Float
-  clientApproved Boolean @default(false)
-  createdAt    DateTime @default(now())
+enum InterimTimesheetStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
 
+// "Pointeuse terrain renforcée" (9.2): GPS + selfie captured at
+// submission, same as RH's ClockEvent, plus a site QR-code token compared
+// against InterimMission.siteQrToken to prove physical presence — kept as
+// its own end-of-shift entry (rather than reusing RH's tap-in/tap-out
+// ClockEvent pipeline) since intérimaires typically submit hours once per
+// day/shift rather than punching in real time.
+model InterimTimesheet {
+  id               String   @id @default(uuid())
+  tenantId         String
+  assignmentId     String
+  assignment       InterimAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  date             DateTime
+  hours            Float
+  clockInLatitude  Float?
+  clockInLongitude Float?
+  selfieUrl        String?
+  siteQrVerified   Boolean  @default(false)
+  status           InterimTimesheetStatus @default(SUBMITTED)
+  // "Extranet validation client" (9.3): a per-timesheet secure link the
+  // client contact can open without a Praxis login — a deliberate
+  // simplification over a full client-portal auth system, same pattern
+  // as IPM's documented "no provider portal" (see providers.controller.ts).
+  validationToken  String?  @unique
+  validatedAt      DateTime?
+  validatedByName  String?
+  rejectionReason  String?
+  createdAt        DateTime @default(now())
+
+  @@unique([assignmentId, date])
   @@index([tenantId])
   @@map("interim_timesheets")
 }
 
 model InterimAdvance {
-  id          String   @id @default(uuid())
-  tenantId    String
-  employeeId  String
-  amountFcfa  Int
-  status      String   @default("REQUESTED")
-  createdAt   DateTime @default(now())
+  id                   String    @id @default(uuid())
+  tenantId             String
+  employeeId           String
+  employee             Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  amountFcfa           Int
+  status               String    @default("REQUESTED") // REQUESTED | APPROVED | REJECTED | PAID
+  paymentTransactionId String?   @unique
+  decidedAt            DateTime?
+  createdAt            DateTime  @default(now())
 
   @@index([tenantId])
   @@map("interim_advances")
+}
+
+enum InterimIncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// "Incidents/blacklisting" (9.4). Severity is a plain fact of what was
+// reported; blacklisting itself is a separate, explicit decision
+// (InterimBlacklistEntry) rather than an automatic side effect of any
+// given severity, so an agency always chooses to blacklist deliberately.
+model InterimIncident {
+  id          String   @id @default(uuid())
+  tenantId    String
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  missionId   String?
+  mission     InterimMission? @relation(fields: [missionId], references: [id])
+  description String
+  severity    InterimIncidentSeverity @default(MEDIUM)
+  reportedBy  String?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("interim_incidents")
+}
+
+// One row per employee (like IpmBeneficiary's suspend/reactivate
+// pattern): `liftedAt` null means currently blacklisted, set means
+// lifted — history of the decision stays on the same row instead of
+// being lost to an update.
+model InterimBlacklistEntry {
+  id            String   @id @default(uuid())
+  tenantId      String
+  employeeId    String   @unique
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  reason        String
+  blacklistedBy String?
+  createdAt     DateTime @default(now())
+  liftedAt      DateTime?
+  liftedReason  String?
+
+  @@index([tenantId])
+  @@map("interim_blacklist_entries")
+}
+
+enum InterimInvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+}
+
+// "Factures proforma" (9.5): totalHours/totalAmountFcfa are computed
+// once at generation time from that period's APPROVED timesheets x the
+// mission's billing rate — not recomputed live — so a sent proforma
+// can't silently change under the client after the fact.
+model InterimProformaInvoice {
+  id              String   @id @default(uuid())
+  tenantId        String
+  missionId       String
+  mission         InterimMission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  periodStart     DateTime
+  periodEnd       DateTime
+  totalHours      Float
+  totalAmountFcfa Int
+  status          InterimInvoiceStatus @default(DRAFT)
+  generatedAt     DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("interim_proforma_invoices")
 }
 
 // ---------------------------------------------------------------------

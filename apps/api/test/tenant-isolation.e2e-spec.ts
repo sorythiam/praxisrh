@@ -168,7 +168,7 @@ describe('Tenant isolation (e2e)', () => {
 
     it('tenant A (RH only) is refused access to the Pack Intérim module', async () => {
       const res = await request(app.getHttpServer())
-        .get('/api/interim/status')
+        .get('/api/interim/missions')
         .set('Authorization', `Bearer ${tokenA}`);
       expect(res.status).toBe(403);
     });

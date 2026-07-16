@@ -44,7 +44,7 @@ export class PayrollService {
    */
   async generate(year: number, month: number) {
     const tenantId = requireTenantId();
-    const ruleSet = await this.rules.getActiveRuleSet('SN');
+    const ruleSet = await this.rules.getActiveRuleSet(await this.resolveCountryCode(tenantId));
     const periodStart = new Date(Date.UTC(year, month - 1, 1));
     const periodEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59));
 
@@ -329,6 +329,15 @@ export class PayrollService {
   private async resolveCompanyName(tenantId: string): Promise<string> {
     const row = await (this.tenantPrisma.client as any).tenant.findUnique({ where: { id: tenantId } });
     return row?.name ?? 'Entreprise';
+  }
+
+  // Same "Tenant passes through unscoped" reasoning as resolveCompanyName
+  // above — this is what makes "un pays à la fois, par configuration"
+  // (section 2.3) actually true: every tenant's payroll runs against
+  // its OWN country's rules, not a hardcoded default.
+  private async resolveCountryCode(tenantId: string): Promise<string> {
+    const row = await (this.tenantPrisma.client as any).tenant.findUnique({ where: { id: tenantId } });
+    return row?.countryCode ?? 'SN';
   }
 
   /** "Versement des salaires ... par mobile money" + réconciliation (section 6.8). */

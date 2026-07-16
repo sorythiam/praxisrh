@@ -5,7 +5,7 @@ import { RulesService } from '../../core/rules/rules.service';
 import { NotificationsService } from '../../core/notifications/notifications.service';
 import { AuditService } from '../../core/audit/audit.service';
 import { CurrentEmployeeService } from '../common/current-employee.service';
-import { getCurrentUserId } from '../../core/tenancy/tenant-context';
+import { getCurrentUserId, requireTenantId } from '../../core/tenancy/tenant-context';
 import { CreateLeaveRequestDto } from './dto/leave-request.dto';
 
 function countBusinessDays(start: Date, end: Date): number {
@@ -39,9 +39,7 @@ export class LeaveService {
   }
 
   private async getBalanceForEmployee(employeeId: string, hireDate: Date, year: number) {
-    // Hardcoded to Senegal for Phase 1 (the only onboarded country); a
-    // second country plugs in by reading tenant.countryCode here instead.
-    const ruleSet = await this.rules.getActiveRuleSet('SN');
+    const ruleSet = await this.rules.getActiveRuleSet(await this.resolveCountryCode());
     const now = new Date();
     const periodStart = new Date(hireDate) > new Date(year, 0, 1) ? new Date(hireDate) : new Date(year, 0, 1);
     const periodEnd = year === now.getFullYear() ? now : new Date(year, 11, 31);
@@ -198,5 +196,15 @@ export class LeaveService {
     }
 
     return { requests, overlaps };
+  }
+
+  // Tenant is intentionally excluded from tenant-scoped auto-injection (it
+  // IS the tenant), so `.tenant.findUnique` on the scoped client passes
+  // straight through unscoped — same pattern as PayrollService. This is
+  // what makes leave accrual follow each tenant's OWN country's rules
+  // (section 2.3) instead of a hardcoded default.
+  private async resolveCountryCode(): Promise<string> {
+    const row = await this.client.tenant.findUnique({ where: { id: requireTenantId() } });
+    return row?.countryCode ?? 'SN';
   }
 }

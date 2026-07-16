@@ -12,7 +12,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { SENEGAL_RULES_2026 } from '@praxis/shared';
+import { COTE_DIVOIRE_RULES_2026, SENEGAL_RULES_2026 } from '@praxis/shared';
 
 const prisma = new PrismaClient();
 
@@ -29,6 +29,20 @@ async function main() {
     },
   });
   console.log('Country rule set (Sénégal) seeded.');
+
+  // Second country activated purely as data (section 2.3) — no service or
+  // controller anywhere references "CI" specifically; RulesService reads
+  // whichever CountryRuleSet row matches a tenant's own countryCode.
+  await prisma.countryRuleSet.upsert({
+    where: { countryCode_effectiveFrom: { countryCode: 'CI', effectiveFrom: new Date(COTE_DIVOIRE_RULES_2026.effectiveFrom) } },
+    update: { payload: COTE_DIVOIRE_RULES_2026 as any },
+    create: {
+      countryCode: 'CI',
+      effectiveFrom: new Date(COTE_DIVOIRE_RULES_2026.effectiveFrom),
+      payload: COTE_DIVOIRE_RULES_2026 as any,
+    },
+  });
+  console.log("Country rule set (Côte d'Ivoire) seeded.");
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 

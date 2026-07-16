@@ -8,6 +8,7 @@ export enum Role {
   COMPANY_ADMIN = 'COMPANY_ADMIN',
   HR_ADMIN = 'HR_ADMIN',
   IPM_MANAGER = 'IPM_MANAGER',
+  INTERIM_MANAGER = 'INTERIM_MANAGER',
   MANAGER = 'MANAGER',
   EMPLOYEE = 'EMPLOYEE',
 }
@@ -17,6 +18,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   [Role.COMPANY_ADMIN]: 'Administrateur entreprise',
   [Role.HR_ADMIN]: 'DRH / Administrateur RH',
   [Role.IPM_MANAGER]: 'Gestionnaire IPM',
+  [Role.INTERIM_MANAGER]: 'Gestionnaire Intérim',
   [Role.MANAGER]: 'Manager',
   [Role.EMPLOYEE]: 'Employé',
 };

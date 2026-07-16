@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { Role } from '@praxis/shared';
 import { api, ApiError, fetcher } from '@/lib/api-client';
 
-const INVITABLE_ROLES = [Role.HR_ADMIN, Role.IPM_MANAGER, Role.MANAGER];
+const INVITABLE_ROLES = [Role.HR_ADMIN, Role.IPM_MANAGER, Role.INTERIM_MANAGER, Role.MANAGER];
 
 export default function SettingsPage() {
   const { data: users, mutate: mutateUsers } = useSWR<any[]>('/users', fetcher);

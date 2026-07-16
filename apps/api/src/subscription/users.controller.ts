@@ -12,7 +12,7 @@ import { InviteUserDto } from './dto/invite-user.dto';
 
 const genTempPassword = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 10);
 
-const INVITABLE_ROLES = [Role.HR_ADMIN, Role.IPM_MANAGER, Role.MANAGER];
+const INVITABLE_ROLES = [Role.HR_ADMIN, Role.IPM_MANAGER, Role.INTERIM_MANAGER, Role.MANAGER];
 
 /**
  * "Invitation des utilisateurs internes (DRH, gestionnaires, managers)"

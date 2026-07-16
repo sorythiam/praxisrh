@@ -9,12 +9,21 @@ import { useAuth } from '@/lib/auth-context';
 
 const ALL_MODULES = [ModuleCode.RH, ModuleCode.IPM, ModuleCode.INTERIM];
 
+// Every country onboarded in the CountryRuleSet engine (section 2.3) —
+// adding a country to this list is a data change only, never a code
+// change to any RH/IPM/Intérim calculation.
+const COUNTRIES = [
+  { code: 'SN', label: 'Sénégal' },
+  { code: 'CI', label: "Côte d'Ivoire" },
+];
+
 export default function SubscribePage() {
   const router = useRouter();
   const { refresh } = useAuth();
   const [modules, setModules] = useState<ModuleCode[]>([ModuleCode.RH]);
   const [companyName, setCompanyName] = useState('');
   const [sector, setSector] = useState('');
+  const [countryCode, setCountryCode] = useState('SN');
   const [adminFirstName, setAdminFirstName] = useState('');
   const [adminLastName, setAdminLastName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
@@ -48,6 +57,7 @@ export default function SubscribePage() {
       const res = await api.post<{ accessToken: string }>('/auth/subscribe', {
         companyName,
         sector,
+        countryCode,
         adminFirstName,
         adminLastName,
         adminEmail,
@@ -122,6 +132,19 @@ export default function SubscribePage() {
           <div>
             <label className="label">Secteur d&apos;activité</label>
             <input className="input" value={sector} onChange={(e) => setSector(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Pays</label>
+            <select className="input" value={countryCode} onChange={(e) => setCountryCode(e.target.value)}>
+              {COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              Détermine le SMIG, les cotisations sociales, les tranches d&apos;impôt et les congés applicables à la paie.
+            </p>
           </div>
         </fieldset>
 
