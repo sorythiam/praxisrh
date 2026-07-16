@@ -99,7 +99,7 @@ export class IpmDashboardService {
       })),
     ];
 
-    return stringify(rows, { header: true });
+    return stringify(rows, { header: true, columns: ICAMO_COLUMNS });
   }
 
   /**
@@ -112,7 +112,7 @@ export class IpmDashboardService {
       where: { periodYear: year, periodMonth: month },
       include: { lines: { include: { employee: { include: { person: true } } } } },
     });
-    if (!payrollReport) return stringify([], { header: true });
+    if (!payrollReport) return stringify([], { header: true, columns: PAYROLL_EXPORT_COLUMNS });
 
     const contributions = await this.client.ipmContribution.findMany({ where: { periodYear: year, periodMonth: month } });
     const beneficiaries = await this.client.ipmBeneficiary.findMany({
@@ -142,6 +142,30 @@ export class IpmDashboardService {
       };
     });
 
-    return stringify(rows, { header: true });
+    return stringify(rows, { header: true, columns: PAYROLL_EXPORT_COLUMNS });
   }
 }
+
+// Passed explicitly to csv-stringify rather than relying on the first
+// row's keys, so a period with zero matching rows still exports a CSV
+// with a header — not a byte-empty file that reads as broken.
+const ICAMO_COLUMNS = [
+  'type',
+  'matricule_adherent',
+  'nom',
+  'numero_carte',
+  'periode',
+  'assiette_fcfa',
+  'montant_fcfa',
+  'categorie',
+];
+
+const PAYROLL_EXPORT_COLUMNS = [
+  'matricule',
+  'nom',
+  'salaire_brut_fcfa',
+  'cotisations_sociales_fcfa',
+  'impot_salaire_fcfa',
+  'retenue_ipm_fcfa',
+  'salaire_net_fcfa',
+];

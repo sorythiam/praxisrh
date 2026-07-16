@@ -81,7 +81,13 @@ export default function CotisationsPage() {
           </div>
           <div>
             <label className="label">Taux (%)</label>
-            <input className="input w-24" type="number" value={ratePercent} onChange={(e) => setRatePercent(parseInt(e.target.value, 10))} />
+            <input
+              className="input w-24"
+              type="number"
+              step="0.01"
+              value={ratePercent}
+              onChange={(e) => setRatePercent(parseFloat(e.target.value))}
+            />
           </div>
           <div>
             <label className="label">Part employeur (%)</label>
