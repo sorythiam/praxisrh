@@ -39,6 +39,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const isManager = user.role === Role.MANAGER;
   const isEmployeeLike = user.role === Role.EMPLOYEE || isManager;
   const isIpmManager = isAdmin || user.role === Role.IPM_MANAGER;
+  const isInterimManager = isAdmin || user.role === Role.INTERIM_MANAGER;
 
   return (
     <div className="flex min-h-screen">
@@ -68,6 +69,16 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <NavLink href="/app/ipm/dossiers">Dossiers de remboursement</NavLink>
             </>
           )}
+          {isInterimManager && (
+            <>
+              <div className="mt-4 px-3 text-xs font-semibold uppercase text-gray-400">Pack Intérim</div>
+              <NavLink href="/app/interim/missions">Missions</NavLink>
+              <NavLink href="/app/interim/timesheets">Pointages</NavLink>
+              <NavLink href="/app/interim/incidents">Incidents &amp; liste noire</NavLink>
+              <NavLink href="/app/interim/advances">Acomptes</NavLink>
+              <NavLink href="/app/interim/billing">Facturation</NavLink>
+            </>
+          )}
           {isManager && (
             <>
               <NavLink href="/app/planning">Planning équipe</NavLink>
@@ -84,6 +95,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <NavLink href="/app/me/talents">Mon évolution</NavLink>
               <NavLink href="/app/me/performance">Ma performance</NavLink>
               <NavLink href="/app/me/ipm">Ma couverture IPM</NavLink>
+              <NavLink href="/app/me/interim">Mes missions intérim</NavLink>
+              <NavLink href="/app/me/interim/timesheets">Mes pointages intérim</NavLink>
+              <NavLink href="/app/me/interim/advances">Mes acomptes intérim</NavLink>
               <NavLink href="/app/me/profile">Mon profil</NavLink>
             </>
           )}
