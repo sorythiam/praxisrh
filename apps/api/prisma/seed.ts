@@ -80,6 +80,11 @@ async function main() {
       update: { isActive: true },
       create: { tenantId: tenant.id, moduleCode: 'IPM' },
     });
+    await tx.moduleActivation.upsert({
+      where: { tenantId_moduleCode: { tenantId: tenant.id, moduleCode: 'INTERIM' } },
+      update: { isActive: true },
+      create: { tenantId: tenant.id, moduleCode: 'INTERIM' },
+    });
 
     const establishment = await tx.establishment.upsert({
       where: { id: '00000000-0000-0000-0000-000000000010' },
@@ -341,12 +346,119 @@ async function main() {
       },
     });
 
+    // -- Intérim gestionnaire --
+    const interimPerson = await tx.person.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000100' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000100',
+        tenantId: tenant.id,
+        firstName: 'Modou',
+        lastName: 'Diagne',
+        email: 'interim@demo.praxis',
+      },
+    });
+    await tx.user.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000101' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000101',
+        tenantId: tenant.id,
+        personId: interimPerson.id,
+        email: 'interim@demo.praxis',
+        passwordHash,
+        role: 'INTERIM_MANAGER',
+      },
+    });
+
+    // -- Pack Intérim demo data: mission, affectation, pointages, incident, acompte --
+    const interimMission = await tx.interimMission.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000110' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000110',
+        tenantId: tenant.id,
+        clientName: 'Supermarché Casino',
+        clientContactName: 'Bineta Sy',
+        clientContactEmail: 'bineta.sy@casino-demo.sn',
+        siteName: 'Hypermarché Sea Plaza',
+        startDate: new Date('2026-07-01'),
+        billingRateFcfaPerHour: 2500,
+        payRateFcfaPerHour: 1500,
+      },
+    });
+    const interimAssignment = await tx.interimAssignment.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000111' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000111',
+        tenantId: tenant.id,
+        missionId: interimMission.id,
+        employeeId: employee.id,
+        startDate: new Date('2026-07-01'),
+      },
+    });
+    await tx.interimTimesheet.upsert({
+      where: { assignmentId_date: { assignmentId: interimAssignment.id, date: new Date('2026-07-14') } },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000112',
+        tenantId: tenant.id,
+        assignmentId: interimAssignment.id,
+        date: new Date('2026-07-14'),
+        hours: 8,
+        siteQrVerified: true,
+        status: 'APPROVED',
+        validationToken: 'demo-validation-token-approved-0001',
+        validatedAt: new Date('2026-07-14T18:00:00Z'),
+        validatedByName: 'Bineta Sy',
+      },
+    });
+    await tx.interimTimesheet.upsert({
+      where: { assignmentId_date: { assignmentId: interimAssignment.id, date: new Date('2026-07-15') } },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000113',
+        tenantId: tenant.id,
+        assignmentId: interimAssignment.id,
+        date: new Date('2026-07-15'),
+        hours: 8,
+        siteQrVerified: true,
+        status: 'SUBMITTED',
+        validationToken: 'demo-validation-token-pending-0002',
+      },
+    });
+    await tx.interimIncident.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000114' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000114',
+        tenantId: tenant.id,
+        employeeId: employee.id,
+        missionId: interimMission.id,
+        description: 'Oubli de pointage en fin de journée le 2026-07-10.',
+        severity: 'LOW',
+      },
+    });
+    await tx.interimAdvance.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000115' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000115',
+        tenantId: tenant.id,
+        employeeId: employee.id,
+        amountFcfa: 25000,
+        status: 'REQUESTED',
+      },
+    });
+
     console.log('Demo tenant seeded:');
     console.log('  Company admin : admin@demo.praxis /', DEMO_PASSWORD);
     console.log('  HR admin      : drh@demo.praxis /', DEMO_PASSWORD);
     console.log('  Manager       : manager@demo.praxis /', DEMO_PASSWORD);
     console.log('  Employee      : employe@demo.praxis /', DEMO_PASSWORD);
     console.log('  IPM manager   : ipm@demo.praxis /', DEMO_PASSWORD);
+    console.log('  Intérim manager : interim@demo.praxis /', DEMO_PASSWORD);
   });
 }
 

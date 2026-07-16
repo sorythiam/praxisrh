@@ -3,11 +3,11 @@
 Phase 1 (this repository) delivers the multi-tenant core and a complete
 Praxis RH module. Phase 2's people-development loop — talents,
 performance/OKR, recruitment — is also built and tested. Phase 3
-(Praxis IPM) is also built and tested end-to-end. This is what remains,
-per the source spec (section 13), in the order it should be built —
-each phase builds only on what's already established, so none of it
-requires revisiting the tenant isolation, auth, or module-activation
-mechanisms.
+(Praxis IPM) and Phase 4 (Pack Intérim + second country) are also built
+and tested end-to-end. What remains is Formation, Engagement, and the
+AI services called out below — each still builds only on what's already
+established, so none of it requires revisiting the tenant isolation,
+auth, or module-activation mechanisms.
 
 ## Phase 2 — Praxis RH avancé (2–3 mois)
 
@@ -84,19 +84,51 @@ acts, not on anything the system adds.
 
 ## Phase 4 — Pack Intérim + interconnexions RH↔IPM (2–3 mois)
 
-- Missions & affectations with dual hourly rates (9.1), reinforced field
-  timeclock with GPS/selfie/QR (9.2), client validation extranet (9.3),
-  incidents/blacklisting (9.4), advances/VDP/proforma (9.5) — schema
-  already in `InterimMission`/`InterimAssignment`/`InterimTimesheet`/
-  `InterimAdvance`.
-- The five RH↔IPM connectors from section 10 (contribution base fed by
-  real payroll, contract-status → coverage-status, medical justification
-  reconciled with absence, consolidated payroll export, shared mobile
-  money payout — the last of which, `PayoutsService`, already exists and
-  is shared by salary/advance payouts today).
-- Second country onboarded into `CountryRuleSet` purely as data, proving
-  the "one country at a time, by configuration" principle from section 2.3.
+The five RH↔IPM connectors from section 10 were already built during
+Phase 3 (see docs/ROADMAP.md's Phase 3 section and
+`docs/ARCHITECTURE.md`'s Phase 3 write-up) — contribution base fed by
+real payroll, contract-status → coverage-status, medical justification
+reconciled with absence, consolidated payroll export, and the shared
+`PayoutsService` used by salary/advance/reimbursement payouts alike.
+What Phase 4 adds:
+
+- ✅ **Missions & affectations** (9.1): dual hourly rates (billing vs.
+  pay), an intérimaire is an ordinary `Employee` (no parallel worker
+  concept), blacklist enforcement blocks a new assignment outright —
+  `src/interim/missions`.
+- ✅ **Pointeuse terrain renforcée** (9.2): GPS + selfie captured at
+  submission, plus a per-mission site QR token compared against what the
+  intérimaire's app submits at clock-in to prove physical presence —
+  `src/interim/timesheets`.
+- ✅ **Extranet validation client** (9.3): a one-time link minted per
+  timesheet lets the client contact approve or contest hours with **no
+  Praxis login at all** — `interim/client-validation/:token`, publicly
+  reachable, using the same sanctioned RLS-bypass pattern
+  `AuthService.login` uses to search across tenants (see
+  `docs/ARCHITECTURE.md`).
+- ✅ **Incidents & blacklisting** (9.4): incident reports are a
+  separate fact from the explicit blacklist decision — reporting an
+  incident never blacklists anyone automatically — `src/interim/incidents`.
+- ✅ **Acomptes & facturation proforma** (9.5): advances paid through the
+  same shared `PayoutsService` as RH salary and IPM reimbursements;
+  proforma invoices computed only from **client-approved** hours ×
+  the mission's billing rate, frozen at generation time —
+  `src/interim/advances`, `src/interim/billing`.
+- ✅ **Frontend**: manager admin screens (missions, timesheets, incidents
+  & blacklist, advances, billing) and intérimaire self-service (my
+  missions, field pointage submission, advance requests) —
+  `apps/web/src/app/app/interim` and `apps/web/src/app/app/me/interim`.
+- ✅ **Second country onboarded into `CountryRuleSet` purely as data**
+  (Côte d'Ivoire), proving the "one country at a time, by configuration"
+  principle from section 2.3 — no code changed in `rules.service.ts`,
+  `payroll.service.ts`, or `leave.service.ts` to add it. Finding and
+  fixing this is exactly what proved the principle: both services had
+  hardcoded `'SN'` instead of reading the tenant's own `countryCode`, a
+  latent bug from Phase 1 that this phase's live testing surfaced (see
+  `docs/ARCHITECTURE.md`).
 
 Exit criterion (spec): a three-module client gets consolidated payroll
-and mission/coverage sync; a second country activates by configuration
-alone.
+and mission/coverage sync — met (Phase 3's interconnections); a second
+country activates by configuration alone — met and verified live
+(a Côte d'Ivoire tenant's payroll and leave accrual compute against CI's
+own rates, not Senegal's).

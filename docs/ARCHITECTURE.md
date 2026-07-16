@@ -12,7 +12,7 @@ in the source tree:
 apps/api/src/core/       Tenant/auth/RBAC/module-activation/notifications/payouts/rules/storage/audit — shared by every module
 apps/api/src/rh/         Praxis RH — fully implemented (Phase 1 + Phase 2)
 apps/api/src/ipm/        Praxis IPM — fully implemented (Phase 3, see below)
-apps/api/src/interim/    Pack Intérim — scaffold only (Phase 4, see below)
+apps/api/src/interim/    Pack Intérim — fully implemented (Phase 4, see below)
 ```
 
 `ModuleCode` (`RH | IPM | INTERIM`) drives everything: which modules a
@@ -20,42 +20,6 @@ tenant sees in the subscription flow, which routes `ModuleGuard` allows a
 request through to, and which Prisma models exist. Adding a country is a
 data change (`CountryRuleSet` row), not a code change; adding a module
 follows the same idea.
-
-## Why Pack Intérim is still "present but not built"
-
-The roadmap in the spec (section 13) is explicit that Praxis RH must be
-built completely before IPM, and IPM before Pack Intérim — a module isn't
-"done" until the whole vertical (self-service portal, offline
-timeclock, payroll, distribution, mobile money) works end to end for it,
-rather than three shallow modules built in parallel. This repo honors
-that ordering: Phase 1 (Core + Praxis RH), Phase 2 (talents/performance/
-recruitment) and Phase 3 (Praxis IPM) are complete and tested end to end;
-Pack Intérim is the one still deliberately scoped out.
-
-What "present" means concretely for Pack Intérim, so activating it later
-is an extension and not a rewrite:
-
-- Every entity from the spec's conceptual data model (section 11) already
-  exists in `prisma/schema.prisma` — `InterimMission`, `InterimAssignment`,
-  `InterimTimesheet`, `InterimAdvance` — with `tenantId` columns and
-  Row-Level Security applied identically to the RH/IPM tables
-  (`prisma/rls.sql`).
-- `ModuleGuard`, the subscription flow, and pricing
-  (`packages/shared/src/modules.ts`) already know about all three
-  modules, including the Pack Intérim → RH dependency rule from section
-  4.4 (enforced in `AuthService.subscribe` and in the `/subscribe` UI).
-- `src/interim/interim.controller.ts` is a minimal, correctly-gated
-  placeholder controller: it proves the module-activation mechanism
-  works for this module today (a tenant without INTERIM gets a 403; a
-  tenant with INTERIM gets a 200), without pretending any business logic
-  exists yet.
-
-Building out the module means: implementing the services/controllers in
-`src/interim` against the existing schema, wiring the RH↔Intérim/IPM
-interconnection points from section 10 (shared PaymentTransaction/
-PayoutsService, contract-status → coverage-status triggers) which the
-Core already supports (Praxis IPM already reuses both), and building the
-corresponding Next.js screens.
 
 ## Tenant isolation
 
@@ -121,9 +85,9 @@ mechanisms — `src/rh/talents`, `src/rh/performance` and
 else, but have no service or controller yet. Unlike IPM/Pack Intérim,
 these aren't separate `ModuleCode`s — they're RH sub-features that would
 be gated by the same `ModuleCode.RH` already exercised by every other
-RH endpoint, so a placeholder controller here wouldn't prove anything
-new the way `src/interim/interim.controller.ts` proves cross-module
-gating. The integration point is already in place:
+RH endpoint, so there's no cross-module-gating proof to build here the
+way a minimal controller once did for IPM/Interim before those modules
+were built out. The integration point is already in place:
 `DevelopmentPlan.recommendedActions` (Talents) is exactly where a
 built-out Formation module would plug in concrete training
 recommendations instead of free-text labels.
@@ -182,3 +146,69 @@ The Next.js screens are under `apps/web/src/app/app/ipm` (manager admin:
 adhérents, cotisations, prestataires, dossiers, dashboard/exports) and
 `apps/web/src/app/app/me/ipm` (employee self-service: coverage card,
 submit a reimbursement with a document upload, track dossier status).
+
+## Phase 4 — Pack Intérim + second country
+
+`src/interim` (`missions`, `timesheets`, `incidents`, `advances`,
+`billing`) is a fully implemented module gated by `ModuleCode.INTERIM`.
+An intérimaire is an ordinary `Employee` — `InterimAssignment` only
+records which client site they're deployed to; their actual employment
+contract with the staffing tenant is an unmodified RH `Contract`, same
+`ContractType` enum as everyone else.
+
+- **9.2 — pointeuse terrain renforcée**: `TimesheetsService.submitMyTimesheet`
+  captures GPS at submission (optional selfie upload follows the same
+  `StorageService` pattern as IPM's reimbursement documents) and compares
+  the submitted `siteQrToken` against `InterimMission.siteQrToken` —
+  `siteQrVerified` is a plain boolean fact on the row, not trusted at
+  face value from the client app.
+- **9.3 — extranet validation client, with no client login**: a
+  `validationToken` is minted per timesheet at submission.
+  `ClientValidationController` (`interim/client-validation/:token`) is
+  marked `@Public()`, so the global `JwtAuthGuard` skips it; `RolesGuard`
+  and `ModuleGuard` both no-op with no `@Roles`/`@RequireModule`
+  metadata; and `TenantTransactionInterceptor` skips opening a tenant
+  transaction since there's no authenticated tenant in
+  `AsyncLocalStorage`. The service instead reaches the one row it needs
+  through `withRlsBypass` — the same sanctioned escape hatch
+  `AuthService.login` uses to search across tenants by email before a
+  tenant is known. The token itself is the only credential, so the
+  response is a hand-curated shape (`TimesheetsService.getByToken`)
+  rather than the raw row, to avoid leaking `tenantId` or internal ids
+  to whoever holds the link.
+- **9.4 — incidents & blacklisting**: reporting an incident
+  (`InterimIncident`) never blacklists anyone by itself — blacklisting
+  (`InterimBlacklistEntry`, one row per employee, `liftedAt` null =
+  currently in effect, same "computed status via a nullable timestamp"
+  shape as IPM's beneficiary suspend/reactivate) is always a separate,
+  explicit decision. `MissionsService.createAssignment` checks it and
+  refuses the assignment outright rather than just warning.
+- **9.5 — acomptes & facturation proforma**: `AdvancesService.pay` calls
+  the same `PayoutsService.runBulkPayout` as RH salary and IPM
+  reimbursements — three payment types, one connector.
+  `BillingService.generateProforma` sums only `APPROVED` timesheets
+  (i.e., client-validated) in the period × the mission's billing rate,
+  so a proforma can never bill for hours the client hasn't signed off on.
+
+**Second country, and a bug it surfaced.** Côte d'Ivoire
+(`COTE_DIVOIRE_RULES_2026` in `packages/shared/src/country-rules.ts`) was
+added purely as data — no changes to `rules.service.ts`. Proving that
+live surfaced a real Phase-1 bug: `payroll.service.ts` and
+`leave.service.ts` both called `this.rules.getActiveRuleSet('SN')` with
+a hardcoded country code instead of reading the tenant's own
+`countryCode`, so every non-Senegal tenant would have silently gotten
+Senegal's contribution rates and leave accrual. Both now resolve the
+tenant's actual country the same way `PayrollService.resolveCompanyName`
+already read the tenant row (`Tenant` is deliberately excluded from
+tenant-scoped auto-injection, so `.tenant.findUnique` on the scoped
+client passes straight through unscoped). Verified live: a Côte d'Ivoire
+tenant's payroll shows the CNPS retirement contribution at 6.3% (not
+Senegal's IPRES 5.6%), and leave accrual at 2.2 days/month worked (not
+Senegal's 2.5).
+
+The Next.js screens are under `apps/web/src/app/app/interim` (manager
+admin: missions, timesheets, incidents & blacklist, advances, billing)
+and `apps/web/src/app/app/me/interim` (intérimaire self-service: my
+missions, submit a pointage, request an advance); the client-validation
+page lives outside the authenticated app shell entirely, at
+`apps/web/src/app/client-validation/[token]`.

@@ -66,7 +66,7 @@ describe('Tenant isolation (e2e)', () => {
         adminLastName: 'B',
         adminEmail: `admin-b-${uniqueSuffix}@test.praxis`,
         password: 'Password123!',
-        modules: ['RH', 'IPM'],
+        modules: ['RH', 'IPM', 'INTERIM'],
       })
       .expect(201);
     tokenB = subB.body.accessToken;
@@ -95,7 +95,7 @@ describe('Tenant isolation (e2e)', () => {
         adminLastName: 'C',
         adminEmail: `admin-c-${uniqueSuffix}@test.praxis`,
         password: 'Password123!',
-        modules: ['RH', 'IPM'],
+        modules: ['RH', 'IPM', 'INTERIM'],
       })
       .expect(201);
     tokenC = subC.body.accessToken;
@@ -274,6 +274,64 @@ describe('Tenant isolation (e2e)', () => {
         .set('Authorization', `Bearer ${tokenC}`)
         .expect(200);
       expect(res.body.find((c: any) => c.category === 'PHARMACIE')).toBeUndefined();
+    });
+  });
+
+  describe('Pack Intérim module', () => {
+    let missionBId: string;
+
+    it('tenant B can create a mission and assign its own employee', async () => {
+      const uniqueSuffix = Date.now();
+      const mission = await request(app.getHttpServer())
+        .post('/api/interim/missions')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({
+          clientName: `Client secret de B ${uniqueSuffix}`,
+          siteName: 'Site B',
+          startDate: '2026-07-01',
+          billingRateFcfaPerHour: 2000,
+          payRateFcfaPerHour: 1200,
+        })
+        .expect(201);
+      missionBId = mission.body.id;
+
+      await request(app.getHttpServer())
+        .post(`/api/interim/missions/${missionBId}/assignments`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ employeeId: employeeBId, startDate: '2026-07-01' })
+        .expect(201);
+    });
+
+    it("tenant C's mission list never includes tenant B's mission", async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/interim/missions')
+        .set('Authorization', `Bearer ${tokenC}`)
+        .expect(200);
+      expect(JSON.stringify(res.body)).not.toContain(missionBId);
+    });
+
+    it("tenant C cannot fetch tenant B's mission by id directly", async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/interim/missions/${missionBId}`)
+        .set('Authorization', `Bearer ${tokenC}`);
+      expect(res.status).not.toBe(200);
+    });
+
+    it('tenant B can blacklist its own employee', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/interim/blacklist')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ employeeId: employeeBId, reason: 'Test isolation' })
+        .expect(201);
+      expect(res.body.employeeId).toBe(employeeBId);
+    });
+
+    it("tenant C's blacklist never includes tenant B's blacklisted employee", async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/interim/blacklist')
+        .set('Authorization', `Bearer ${tokenC}`)
+        .expect(200);
+      expect(JSON.stringify(res.body)).not.toContain(employeeBId);
     });
   });
 
