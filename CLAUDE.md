@@ -25,6 +25,18 @@ versionné (`.gitignore`). C'est géré automatiquement par :
 `npm run build` à la racine orchestre l'ordre correct
 (`shared` → `api` → `web`) pour un build local complet.
 
+**Piège Docker** : `apps/api/Dockerfile` et `apps/web/Dockerfile` ont un
+stage `deps` qui ne copie que les `package.json` (pas le code source,
+pas les `tsconfig.json`) avant de lancer `npm ci` — c'est fait exprès,
+pour profiter du cache Docker sur les dépendances. Si ce `npm ci` lançait
+les `postinstall` ci-dessus, ils échoueraient (rien à compiler, pas de
+`tsconfig.json` présent à ce stage). D'où `npm ci --ignore-scripts` dans
+ce stage précis ; le stage `build` qui suit copie le code source complet
+et relance explicitement les mêmes étapes (`build --workspace=...`,
+`prisma:generate`), donc rien n'est perdu. Ne jamais retirer ce
+`--ignore-scripts` sans revérifier que le stage `deps` ne recopie pas
+aussi le code source.
+
 ## Conventions
 
 - **Avant chaque push** : `npm run build` (tous workspaces) et les tests

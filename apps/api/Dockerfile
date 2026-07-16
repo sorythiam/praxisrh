@@ -6,7 +6,12 @@ WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN npm ci
+# --ignore-scripts: this layer only has package.json files (no source, no
+# tsconfig yet), so the postinstall hooks that build packages/shared and
+# run `prisma generate` would fail here with nothing to compile against.
+# The build stage below runs those same steps explicitly once real
+# source is copied in, so skipping them here is safe, not a shortcut.
+RUN npm ci --ignore-scripts
 
 FROM deps AS build
 COPY packages/shared packages/shared

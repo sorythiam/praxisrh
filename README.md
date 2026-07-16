@@ -91,12 +91,52 @@ docker compose -f infra/docker-compose.yml exec api npm run prisma:seed
 
 Web app: http://localhost:3000 · API: http://localhost:4000/api
 
-> Note: this Dockerfile/compose setup was written and reviewed but could
-> not be build-tested inside this development sandbox (outbound access
-> to the Docker Hub CDN was blocked by the sandbox's network policy).
-> The underlying build steps (npm workspace install, Prisma generate,
-> `nest build`, `next build`) were all verified directly and pass; test
+> Note: `docker build` itself couldn't run inside this development
+> sandbox (outbound access to the Docker Hub CDN is blocked by the
+> sandbox's network policy), but every step either Dockerfile performs
+> was verified directly by reproducing each build stage's exact file
+> layout and commands (`npm ci --ignore-scripts` with only the
+> `package.json` files present, then `npm run build --workspace=...`
+> for shared/api/web with full source) — all pass. Still worth a real
 > `docker compose build` on first deploy.
+
+## Deploying to Railway (API) + Vercel (web)
+
+The API is NestJS, not Next.js — Vercel's zero-config story is built
+around Next.js, so the pragmatic split is: **Vercel hosts `apps/web`**,
+**Railway (or Render) hosts `apps/api`** plus a managed Postgres. No
+code is different between this and the Docker/self-hosted path above;
+same image, same migrations-on-boot entrypoint.
+
+**API on Railway:**
+1. New Railway project → add a Postgres plugin (`DATABASE_URL` is
+   injected automatically once linked — don't set it by hand).
+2. Add a service from this repo. Railway picks up `railway.json` at the
+   repo root, which points it at `apps/api/Dockerfile` with the repo
+   root as build context (the Dockerfile depends on `packages/shared`
+   via an npm workspace, so it needs that full context — same reason
+   `infra/docker-compose.yml` builds it the same way).
+3. Set env vars (see `apps/api/.env.example`): `JWT_SECRET` (a real
+   secret, not the placeholder), `WEB_ORIGIN` (the Vercel URL once you
+   have it, comma-separated if you need more than one), `STORAGE_DIR`
+   (e.g. `/data/storage`).
+4. Attach a **Volume** mounted at whatever `STORAGE_DIR` points to.
+   Without one, generated payslips/IPM documents/intérim selfies are
+   lost on every redeploy — Railway's filesystem is ephemeral otherwise.
+5. `docker-entrypoint.sh` runs `prisma migrate deploy` + applies
+   `rls.sql` on every boot, so first deploy needs no manual migration
+   step.
+
+**Web on Vercel:**
+1. Import the repo, Root Directory = `apps/web` (Vercel still runs
+   `npm install` from the monorepo root when it detects npm workspaces,
+   which is what makes `packages/shared`'s `postinstall` build it before
+   `next build` runs — see `docs/ARCHITECTURE.md`).
+2. Set `API_URL` (see `apps/web/.env.example`) to the Railway service's
+   public URL — `next.config.js`'s rewrite proxies `/api/*` there, so no
+   other frontend code needs to know the API's actual address.
+3. Once you have the Vercel URL, go back and set it as `WEB_ORIGIN` on
+   the Railway service so CORS allows it.
 
 ## Tests
 

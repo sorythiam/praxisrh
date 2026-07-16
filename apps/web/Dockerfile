@@ -5,7 +5,11 @@ WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN npm ci
+# --ignore-scripts: this layer only has package.json files (no source, no
+# tsconfig yet), so the postinstall hook that builds packages/shared would
+# fail here with nothing to compile against. The build stage below runs
+# that same step explicitly once real source is copied in.
+RUN npm ci --ignore-scripts
 
 FROM deps AS build
 COPY packages/shared packages/shared
