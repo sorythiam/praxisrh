@@ -16,6 +16,7 @@
     "build:shared": "npm run build --workspace=packages/shared",
     "prisma:generate": "npm run prisma:generate --workspace=apps/api",
     "prisma:migrate": "npm run prisma:migrate --workspace=apps/api",
+    "prisma:deploy": "npm run prisma:deploy --workspace=apps/api",
     "prisma:seed": "npm run prisma:seed --workspace=apps/api"
   },
   "engines": {
